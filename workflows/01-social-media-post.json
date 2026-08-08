@@ -1,0 +1,146 @@
+{
+  "name": "Social Media Post Automation",
+  "description": "Reads pending blog posts from Google Sheets and auto-publishes to LinkedIn, Facebook, and Instagram with AI-generated captions. Runs twice daily at 9 AM and 6 PM.",
+  "nodes": [
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "notes": "Runs at 9 AM and 6 PM daily",
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 9,18 * * *"}]
+        }
+      }
+    },
+    {
+      "name": "Get Pending Post from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "notes": "Fetches first row where Status = Pending",
+      "parameters": {
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Sheet1",
+        "filtersUI": {"values": [{"lookupColumn": "Status", "lookupValue": "Pending"}]},
+        "options": {"returnFirstMatch": true}
+      }
+    },
+    {
+      "name": "Claude AI — Generate Captions",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "notes": "Generates platform-specific captions for LinkedIn, Facebook, and Instagram",
+      "parameters": {
+        "promptType": "define",
+        "text": "Generate unique social media captions for LinkedIn, Facebook, and Instagram based on the blog post title and content. Return JSON with keys: linkedin_post, facebook_post, instagram_caption."
+      }
+    },
+    {
+      "name": "OpenRouter Chat Model (Claude Sonnet)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "notes": "Claude Sonnet 4.6 via OpenRouter",
+      "parameters": {
+        "model": "anthropic/claude-sonnet-4-6",
+        "options": {"maxTokens": 1200},
+        "credentials": "YOUR_OPENROUTER_API_KEY"
+      }
+    },
+    {
+      "name": "Download Blog Image for LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{ $('Get Pending Post from Google Sheets').item.json.Image }}",
+        "options": {"response": {"response": {"responseFormat": "file"}}}
+      }
+    },
+    {
+      "name": "LinkedIn Post",
+      "type": "n8n-nodes-base.linkedIn",
+      "parameters": {
+        "person": "YOUR_LINKEDIN_PERSON_ID",
+        "text": "={{ JSON.parse($json.text).linkedin_post }}",
+        "shareMediaCategory": "IMAGE",
+        "credentials": "YOUR_LINKEDIN_OAUTH_CREDENTIALS"
+      }
+    },
+    {
+      "name": "Facebook Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v25.0/YOUR_FACEBOOK_PAGE_ID/photos",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "message", "value": "={{ JSON.parse($json.text).facebook_post }}"},
+            {"name": "url", "value": "={{ $('Get Pending Post from Google Sheets').item.json.Image }}"},
+            {"name": "access_token", "value": "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "Facebook Comment (Blog Link)",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v25.0/YOUR_FACEBOOK_POST_ID/comments",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "message", "value": "Read the full article 👇\n{{ $('Get Pending Post from Google Sheets').item.json.Link }}"},
+            {"name": "access_token", "value": "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "Instagram — Create Media Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v25.0/YOUR_INSTAGRAM_ACCOUNT_ID/media",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "caption", "value": "={{ JSON.parse($json.text).instagram_caption }}"},
+            {"name": "image_url", "value": "={{ $('Get Pending Post from Google Sheets').item.json.Image }}"},
+            {"name": "access_token", "value": "YOUR_INSTAGRAM_ACCESS_TOKEN"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "Instagram — Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v25.0/YOUR_INSTAGRAM_ACCOUNT_ID/media_publish",
+        "queryParameters": {
+          "parameters": [
+            {"name": "creation_id", "value": "={{ $json.id }}"},
+            {"name": "access_token", "value": "YOUR_INSTAGRAM_ACCESS_TOKEN"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "Mark as Published in Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "update",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Sheet1",
+        "columns": {"value": {"Status": "published"}}
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {"main": [[{"node": "Get Pending Post from Google Sheets"}]]},
+    "Get Pending Post from Google Sheets": {"main": [[{"node": "Claude AI — Generate Captions"}]]},
+    "Claude AI — Generate Captions": {"main": [[{"node": "Download Blog Image for LinkedIn"}, {"node": "Facebook Post"}, {"node": "Instagram — Create Media Container"}]]},
+    "Download Blog Image for LinkedIn": {"main": [[{"node": "LinkedIn Post"}]]},
+    "Facebook Post": {"main": [[{"node": "Facebook Comment (Blog Link)"}]]},
+    "Instagram — Create Media Container": {"main": [[{"node": "Instagram — Publish"}]]},
+    "Instagram — Publish": {"main": [[{"node": "Mark as Published in Google Sheets"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Claude AI", "OpenRouter", "Google Sheets", "LinkedIn API", "Facebook Graph API", "Instagram Graph API"]
+  }
+}
