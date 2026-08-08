@@ -1,0 +1,180 @@
+{
+  "name": "RINDAX CRM Agent — Outreach & Response Tracker",
+  "description": "Fully autonomous CRM agent powered by Claude Sonnet 4.6. Fetches leads from Airtable, writes personalized outreach emails, sends via Gmail, tracks replies, and updates lead status automatically. Two agents run in parallel: Outreach Agent (9 AM daily) and Response Tracker (every 4 hours).",
+  "agents": [
+    {
+      "name": "CRM Outreach Agent",
+      "trigger": "Schedule — 9 AM daily",
+      "model": "Claude Sonnet 4.6 (Anthropic)",
+      "description": "Fetches New and Follow-Up Due leads from Airtable, extracts emails from mixed Contact Info field, deduplicates, then loops — sending a personalized Gmail and updating Airtable status to Contacted."
+    },
+    {
+      "name": "CRM Response Tracker Agent",
+      "trigger": "Schedule — every 4 hours",
+      "model": "Claude Sonnet 4.6 (Anthropic)",
+      "description": "Checks Gmail inbox for unread emails, matches senders against Contacted leads in Airtable, classifies intent (Replied / Meeting Booked / Not Interested), and updates Airtable automatically."
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Outreach Schedule (9 AM Daily)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"triggerAtHour": 9}]}}
+    },
+    {
+      "name": "Fetch Leads from Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "notes": "Fetches leads with Status = New, Follow Up Due, or Replied",
+      "parameters": {
+        "operation": "search",
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "filterByFormula": "OR({Status} = 'New', {Status} = 'Follow Up Due', {Status} = 'Replied')"
+      }
+    },
+    {
+      "name": "Extract Email from Contact Info",
+      "type": "n8n-nodes-base.code",
+      "notes": "Regex extracts email from mixed Contact Info field (may contain phone, LinkedIn URL, and email together)",
+      "parameters": {
+        "jsCode": "const contactInfo = $input.item.json['Contact Info'] || '';\nconst emailMatch = contactInfo.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);\nconst extractedEmail = emailMatch ? emailMatch[0].toLowerCase().trim() : '';\nconst today = new Date();\nconst todayISO = today.toISOString().split('T')[0];\nconst followUp = new Date(today);\nfollowUp.setDate(followUp.getDate() + 3);\nreturn { json: { ...$input.item.json, extractedEmail, todayDate: todayISO, followUpDate: followUp.toISOString().split('T')[0] } };"
+      }
+    },
+    {
+      "name": "Filter: Has Email?",
+      "type": "n8n-nodes-base.filter",
+      "notes": "Passes only leads where an email was successfully extracted"
+    },
+    {
+      "name": "Remove Duplicate Emails",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "notes": "Deduplicates leads by extracted email address to avoid sending duplicate emails",
+      "parameters": {"compare": "selectedFields", "fieldsToCompare": "extractedEmail"}
+    },
+    {
+      "name": "No Email — Auto Close Lead",
+      "type": "n8n-nodes-base.airtable",
+      "notes": "Auto-closes leads with no email found in Contact Info",
+      "parameters": {
+        "operation": "update",
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "columns": {"value": {"Status": "Closed", "Notes": "Auto-closed: No email address found in Contact Info"}}
+      }
+    },
+    {
+      "name": "Loop Over Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "notes": "Processes one lead at a time"
+    },
+    {
+      "name": "CRM Outreach Agent (Claude)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "notes": "Claude Sonnet AI Agent — reads lead data, writes personalized email, sends via Gmail, updates Airtable",
+      "parameters": {
+        "model": "Claude Sonnet 4.6",
+        "credentials": "YOUR_ANTHROPIC_API_KEY",
+        "systemMessage": "You are a diligent CRM automation agent for RINDAX, an AI automation agency. Always process ALL leads returned. Never skip a lead. Write personalized outreach emails based on the company name, industry, and recommended service. After sending an email, always update Airtable immediately before moving to the next lead.",
+        "maxIterations": 30,
+        "tools": ["Send Email via Gmail", "Update Lead Status in Airtable"]
+      }
+    },
+    {
+      "name": "Send Email via Gmail",
+      "type": "n8n-nodes-base.gmailTool",
+      "notes": "AI-controlled Gmail tool. Claude decides recipient, subject, and body.",
+      "parameters": {
+        "senderName": "Prasanna | RINDAX",
+        "credentials": "YOUR_GMAIL_OAUTH_CREDENTIALS"
+      }
+    },
+    {
+      "name": "Update Lead Status in Airtable",
+      "type": "n8n-nodes-base.airtableTool",
+      "notes": "AI-controlled Airtable tool. Updates Status, Last Contacted, Follow Up Date, Notes.",
+      "parameters": {
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "credentials": "YOUR_AIRTABLE_API_KEY"
+      }
+    },
+    {
+      "name": "Response Tracker Schedule (Every 4 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 4}]}}
+    },
+    {
+      "name": "CRM Response Tracker Agent (Claude)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "notes": "Claude Sonnet AI Agent — checks Gmail inbox, matches replies to Airtable leads, classifies intent, updates status",
+      "parameters": {
+        "model": "Claude Sonnet 4.6",
+        "credentials": "YOUR_ANTHROPIC_API_KEY",
+        "systemMessage": "You are a precise CRM tracking agent. Check Gmail inbox for unread emails. Match each email sender to a lead in Airtable by email address. Classify the reply intent: Replied, Meeting Booked, Not Interested, or Needs More Info. Always update Airtable after every classification.",
+        "maxIterations": 30,
+        "tools": ["Check Gmail Inbox for Replies", "Fetch Contacted Leads from Airtable", "Update Lead Reply Status in Airtable"]
+      }
+    },
+    {
+      "name": "Check Gmail Inbox for Replies",
+      "type": "n8n-nodes-base.gmailTool",
+      "notes": "Fetches all unread emails from inbox (excluding sent)",
+      "parameters": {
+        "operation": "getAll",
+        "filters": {"q": "in:inbox -from:me", "readStatus": "unread"},
+        "credentials": "YOUR_GMAIL_OAUTH_CREDENTIALS"
+      }
+    },
+    {
+      "name": "Fetch Contacted Leads from Airtable",
+      "type": "n8n-nodes-base.airtableTool",
+      "notes": "Fetches all leads with Status = Contacted for reply matching",
+      "parameters": {
+        "operation": "search",
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "filterByFormula": "{Status} = 'Contacted'",
+        "credentials": "YOUR_AIRTABLE_API_KEY"
+      }
+    },
+    {
+      "name": "Update Lead Reply Status in Airtable",
+      "type": "n8n-nodes-base.airtableTool",
+      "notes": "Updates lead with reply classification: Replied / Meeting Booked / Not Interested / Contacted",
+      "parameters": {
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "credentials": "YOUR_AIRTABLE_API_KEY"
+      }
+    }
+  ],
+  "airtable_schema": {
+    "fields": ["Company", "Industry", "Decision Maker", "Contact Info", "Why Fit", "Recommended Service", "Outreach Subject", "Outreach Message", "Status", "Date Added", "Last Contacted", "Follow Up Date", "Notes", "Response Summary", "Temperature", "Confidence"],
+    "status_values": ["New", "Contacted", "Replied", "Meeting Booked", "Closed", "Not Interested", "Follow Up Due"]
+  },
+  "connections": {
+    "Outreach Schedule (9 AM Daily)": {"main": [[{"node": "Fetch Leads from Airtable"}]]},
+    "Fetch Leads from Airtable": {"main": [[{"node": "Extract Email from Contact Info"}]]},
+    "Extract Email from Contact Info": {"main": [[{"node": "Filter: Has Email?"}]]},
+    "Filter: Has Email?": {
+      "main": [
+        [{"node": "Remove Duplicate Emails"}],
+        [{"node": "No Email — Auto Close Lead"}]
+      ]
+    },
+    "Remove Duplicate Emails": {"main": [[{"node": "Loop Over Leads"}]]},
+    "Loop Over Leads": {
+      "main": [
+        [{"node": "Done"}],
+        [{"node": "CRM Outreach Agent (Claude)"}]
+      ]
+    },
+    "CRM Outreach Agent (Claude)": {"main": [[{"node": "Loop Over Leads"}]]},
+    "Response Tracker Schedule (Every 4 Hours)": {"main": [[{"node": "CRM Response Tracker Agent (Claude)"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Claude Sonnet 4.6", "Anthropic API", "Airtable", "Gmail", "AI Agent Nodes"]
+  }
+}
