@@ -12,7 +12,7 @@ This repository showcases production-ready AI automation workflows built with **
 
 | Document | Description |
 |---|---|
-| [📋 AI Automation Capability Statement](./Prasanna-Kumar-Das-AI-Automation-Capability-Statement.pdf) | Full service overview, tech stack, and case studies |
+| [📋 AI Automation Capability Statement (Download PDF)](https://github.com/prasannadas03-gif/rindax-ai-workflows/raw/main/Prasanna-Kumar-Das-AI-Automation-Capability-Statement.pdf) | Full service overview, tech stack, and case studies |
 | [📊 Data Analytics Portfolio](https://github.com/prasannadas03-gif/Data-analytics-portfolio) | Power BI & Excel dashboard projects |
 
 ---
