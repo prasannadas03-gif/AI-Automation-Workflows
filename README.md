@@ -32,6 +32,8 @@ Schedule Trigger → Google Sheets (fetch pending post) → Claude AI (generate 
 → LinkedIn Post → Facebook Post → Instagram Publish → Google Sheets (mark published)
 ```
 
+![Social Media Post Automation Workflow](./assets/Social%20Media%20Post%20Automation.PNG)
+
 ---
 
 ### 2. 📡 RSS Feed → Social Media Pipeline
@@ -46,6 +48,8 @@ Fully automated pipeline that monitors the RINDAX blog RSS feed and instantly pu
 RSS Feed Trigger → HTML Parser (extract image) → Claude AI (generate captions)
 → Facebook Post → LinkedIn Post → Instagram Publish
 ```
+
+![RSS Feed Social Media Pipeline Workflow](./assets/RSS%20Feed_Social%20Media%20Pipeline.PNG)
 
 ---
 
@@ -70,6 +74,8 @@ Schedule (9 AM) → Airtable (fetch leads) → Extract Email → Filter → Dedu
 Schedule (every 4h) → Claude Agent:
   Check Gmail → Match replies → Classify intent → Update Airtable
 ```
+
+![CRM Agent Workflow](./assets/CRM%20Agent.PNG)
 
 ---
 
