@@ -1,0 +1,91 @@
+{
+  "name": "RINDAX — High-Intent B2B Lead Gen & AI Qualification",
+  "description": "A zero-cost buyer-intent engine: scans free public job-board APIs (Arbeitnow, Jobicy, RemoteOK) and subreddits (r/smallbusiness, r/Entrepreneur) for businesses openly describing manual, repetitive operational pain (spreadsheets, manual CRM updates, manual reporting), keyword-scores the signal strength, then runs candidates through a two-stage AI pipeline: a primary Gemini qualifier scores fit 0-100 against 7 weighted criteria, followed by a second, deliberately skeptical Gemini 'auditor' model with veto power that re-checks the first model's reasoning before anything is saved to the CRM.",
+  "nodes": [
+    {
+      "name": "Manual Trigger / Schedule Daily 8 AM & 4 PM",
+      "type": "n8n-nodes-base.manualTrigger / n8n-nodes-base.scheduleTrigger",
+      "notes": "Can be run on-demand or on a twice-daily schedule"
+    },
+    {
+      "name": "Fetch Arbeitnow / Jobicy / RemoteOK Free APIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "notes": "3 parallel calls to free public job-board APIs"
+    },
+    {
+      "name": "Fetch Reddit r/smallbusiness & r/Entrepreneur Buyer Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "notes": "Reddit search API filtered for phrases like 'manually update', 'still using spreadsheets', 'manual data entry'"
+    },
+    {
+      "name": "Normalize & Signal Scoring",
+      "type": "n8n-nodes-base.code",
+      "notes": "Normalizes Reddit posts and job listings into a common schema, then scores each against 9 pain-signal keyword groups (data, CRM/sales, communication, operations, reporting, scheduling, documents, customer service, recruitment) plus weighted contextual and high-intent phrase matches; flags obvious large-enterprise names; requires a minimum signal score of 3 to proceed"
+    },
+    {
+      "name": "Fetch Existing CRM Leads",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Filter Duplicates & Enterprises",
+      "type": "n8n-nodes-base.code",
+      "notes": "Drops known large-enterprise domains and anything already in the CRM by company name or source URL"
+    },
+    {
+      "name": "Primary Gemini AI Qualification",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "notes": "Scores the lead 0-100 across business fit, automation need, evidence strength, commercial potential, operational complexity, decision-maker reachability, and personalization potential, distinguishing stated facts from AI inference and enforcing mandatory qualification gates",
+      "parameters": {"modelId": "models/gemini-2.5-flash"}
+    },
+    {
+      "name": "Parse & Validate Primary AI JSON",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "name": "Check Qualification Gate",
+      "type": "n8n-nodes-base.if",
+      "notes": "Requires qualified=true, score >= 70, target_fit != REJECT, automation_need and commercial_potential both true"
+    },
+    {
+      "name": "Skeptical AI Validator",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "notes": "A second Gemini pass explicitly instructed to try to disprove the first model's qualification — holds hard veto power over weak or over-interpreted leads",
+      "parameters": {"modelId": "models/gemini-3.1-flash-lite"}
+    },
+    {
+      "name": "Check Validation Gate",
+      "type": "n8n-nodes-base.if",
+      "notes": "Only leads that pass the skeptical auditor's audit_pass check proceed"
+    },
+    {
+      "name": "Format & Enrich Lead for CRM",
+      "type": "n8n-nodes-base.code",
+      "notes": "Blends both AI passes into a final score/priority tier (P1 High-Intent / P2 Strong / P3 Potential), maps to CRM field IDs, and builds a structured 'Why Fit' note with pain signal, proposed workflow, evidence, and audit verdict"
+    },
+    {
+      "name": "Save To RINDAX Leads CRM",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID"}
+    }
+  ],
+  "connections": {
+    "Manual Trigger / Schedule Daily 8 AM & 4 PM": {"main": [[{"node": "Fetch Arbeitnow / Jobicy / RemoteOK Free APIs"}, {"node": "Fetch Reddit r/smallbusiness & r/Entrepreneur Buyer Intent"}]]},
+    "Fetch Arbeitnow / Jobicy / RemoteOK Free APIs": {"main": [[{"node": "Normalize & Signal Scoring"}]]},
+    "Fetch Reddit r/smallbusiness & r/Entrepreneur Buyer Intent": {"main": [[{"node": "Normalize & Signal Scoring"}]]},
+    "Normalize & Signal Scoring": {"main": [[{"node": "Fetch Existing CRM Leads"}]]},
+    "Fetch Existing CRM Leads": {"main": [[{"node": "Filter Duplicates & Enterprises"}]]},
+    "Filter Duplicates & Enterprises": {"main": [[{"node": "Primary Gemini AI Qualification"}]]},
+    "Primary Gemini AI Qualification": {"main": [[{"node": "Parse & Validate Primary AI JSON"}]]},
+    "Parse & Validate Primary AI JSON": {"main": [[{"node": "Check Qualification Gate"}]]},
+    "Check Qualification Gate": {"main": [[{"node": "Skeptical AI Validator"}]]},
+    "Skeptical AI Validator": {"main": [[{"node": "Check Validation Gate"}]]},
+    "Check Validation Gate": {"main": [[{"node": "Format & Enrich Lead for CRM"}]]},
+    "Format & Enrich Lead for CRM": {"main": [[{"node": "Save To RINDAX Leads CRM"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Google Gemini (dual-model qualification)", "Airtable", "3 free job-board APIs", "Reddit API"]
+  }
+}

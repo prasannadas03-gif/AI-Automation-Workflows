@@ -1,0 +1,78 @@
+{
+  "name": "Direct Human Hiring Opportunity Finder",
+  "description": "Twice-daily scan of Reddit (r/forhire) and DuckDuckGo search results for people directly asking to hire an n8n/automation freelancer — as opposed to formal ATS job postings. Extracts contact emails/LinkedIn profiles, screens out job-seeker and agency-advertisement posts, runs the requirement through a strict Gemini evaluator with hard rejection gates, and saves the top 10 highest-fit new opportunities to Airtable.",
+  "nodes": [
+    {
+      "name": "Schedule 10AM & 6PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"triggerAtHour": 10}, {"triggerAtHour": 18}]}}
+    },
+    {
+      "name": "Source 1-6 (Reddit r/forhire x2, DuckDuckGo x3, n8n Community Jobs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "notes": "6 parallel calls: Reddit's own search JSON API (2 query variants), DuckDuckGo HTML search for X/Twitter/LinkedIn/general hiring posts, and the n8n Community forum's Jobs category"
+    },
+    {
+      "name": "Normalize Source Payloads",
+      "type": "n8n-nodes-base.code",
+      "notes": "Branch-detects each source's response shape (Reddit JSON, Discourse forum JSON, DuckDuckGo HTML) and extracts a common {title, url, raw_text, published_date, source_platform} record from each"
+    },
+    {
+      "name": "Pre-Filter & Extract Contacts",
+      "type": "n8n-nodes-base.code",
+      "notes": "Flags likely job-seeker / service-provider-ad posts; requires demand + work-action + skill keyword signals; extracts and prioritizes named human emails over generic ones, plus LinkedIn profile URLs; drops anything with no usable contact method before it reaches the AI step"
+    },
+    {
+      "name": "Gemini Fit Evaluator",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "notes": "Evaluates whether the post is a genuine, current, active hiring requirement (not a directory, ad, or old post), scores 0-100 across 9 weighted components, and applies hard rejections for company size, missing contact info, strict experience requirements, and non-remote-compatible location constraints",
+      "parameters": {"batching": {"batchSize": 3, "delayBetweenBatches": 1000}}
+    },
+    {
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "parameters": {"modelName": "models/gemini-3.1-flash-lite", "options": {"temperature": 0.2}}
+    },
+    {
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "notes": "Parses the model output and computes is_eligible from fit_score >= 70 + active_requirement + non-REJECT recommendation"
+    },
+    {
+      "name": "Filter Score >= 70 & Active Req",
+      "type": "n8n-nodes-base.filter"
+    },
+    {
+      "name": "Fetch Existing Airtable Records",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID", "table": "direct"}
+    },
+    {
+      "name": "Deduplicate Sort & Limit Top 10",
+      "type": "n8n-nodes-base.code",
+      "notes": "Dedupes against existing records by Opportunity ID, source URL, and company+title+email composite key; sorts by fit score (ties broken by presence of a direct email); keeps the top 10 and formats the Airtable record payload"
+    },
+    {
+      "name": "Save Top 10 to Airtable direct",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID", "table": "direct"}
+    }
+  ],
+  "connections": {
+    "Schedule 10AM & 6PM IST": {"main": [[{"node": "Source 1-6 (Reddit r/forhire x2, DuckDuckGo x3, n8n Community Jobs)"}]]},
+    "Source 1-6 (Reddit r/forhire x2, DuckDuckGo x3, n8n Community Jobs)": {"main": [[{"node": "Normalize Source Payloads"}]]},
+    "Normalize Source Payloads": {"main": [[{"node": "Pre-Filter & Extract Contacts"}]]},
+    "Pre-Filter & Extract Contacts": {"main": [[{"node": "Gemini Fit Evaluator"}]]},
+    "Gemini Fit Evaluator": {"main": [[{"node": "Parse AI JSON"}]]},
+    "Parse AI JSON": {"main": [[{"node": "Filter Score >= 70 & Active Req"}]]},
+    "Filter Score >= 70 & Active Req": {"main": [[{"node": "Fetch Existing Airtable Records"}]]},
+    "Fetch Existing Airtable Records": {"main": [[{"node": "Deduplicate Sort & Limit Top 10"}]]},
+    "Deduplicate Sort & Limit Top 10": {"main": [[{"node": "Save Top 10 to Airtable direct"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Google Gemini", "Airtable", "Reddit API", "DuckDuckGo search"],
+    "companion_workflow": "RINDAX Job Draft Email Bridge — native Telegram inline buttons to send or reject the drafted outreach email for each new opportunity."
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "name": "Daily Mail Router — Email Triage & Auto-Reply System",
+  "description": "A webhook-driven router that receives pre-classified email events (from a paired Gmail-monitoring workflow) and routes them by tier: FYI-only 'summary' emails post a Telegram notification; 'reply_approval' emails are staged in an n8n Data Table and sent to Telegram with inline Approve/Reject buttons — approving triggers an instant Gmail reply with the AI-drafted response, then cleans up the pending record.",
+  "nodes": [
+    {
+      "name": "Router Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "notes": "Receives POSTs with {tier, from, subject, summary, draftBody, messageId, threadId, ...} from the paired mail-classification workflow",
+      "parameters": {"httpMethod": "POST", "path": "YOUR_WEBHOOK_PATH"}
+    },
+    {
+      "name": "Route By Tier",
+      "type": "n8n-nodes-base.switch",
+      "notes": "Routes on body.tier: 'summary' | 'reply_approval' | fallback 'Unknown Tier'"
+    },
+    {
+      "name": "Send Summary Notification",
+      "type": "n8n-nodes-base.telegram",
+      "notes": "FYI-only branch — posts sender, subject, AI summary, and any action-needed note"
+    },
+    {
+      "name": "Store Pending Approval",
+      "type": "n8n-nodes-base.dataTable",
+      "notes": "Stages the drafted reply (thread ID, from address, Gmail message ID, subject, draft body) in an n8n Data Table pending human approval"
+    },
+    {
+      "name": "Send Approval Request",
+      "type": "n8n-nodes-base.telegram",
+      "notes": "Sends the summary + drafted reply with inline '✅ Send Reply' / '❌ Reject' buttons, callback_data keyed to the thread ID"
+    },
+    {
+      "name": "Approval Callback Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "parameters": {"updates": ["callback_query"]}
+    },
+    {
+      "name": "Lookup Pending Approval",
+      "type": "n8n-nodes-base.dataTable",
+      "notes": "Retrieves the staged draft by thread ID from the callback data"
+    },
+    {
+      "name": "Is Approved?",
+      "type": "n8n-nodes-base.if"
+    },
+    {
+      "name": "Send Reply Email",
+      "type": "n8n-nodes-base.gmail",
+      "notes": "Sends the drafted reply to the original sender only",
+      "parameters": {"operation": "reply"}
+    },
+    {
+      "name": "Edit Message + Cleanup (Approved / Rejected)",
+      "type": "n8n-nodes-base.telegram / n8n-nodes-base.dataTable",
+      "notes": "Updates the Telegram message to show the outcome (buttons removed) and deletes the pending row either way"
+    }
+  ],
+  "connections": {
+    "Router Webhook": {"main": [[{"node": "Route By Tier"}]]},
+    "Route By Tier": {"main": [[{"node": "Send Summary Notification"}], [{"node": "Store Pending Approval"}]]},
+    "Store Pending Approval": {"main": [[{"node": "Send Approval Request"}]]},
+    "Approval Callback Trigger": {"main": [[{"node": "Lookup Pending Approval"}]]},
+    "Lookup Pending Approval": {"main": [[{"node": "Is Approved?"}]]},
+    "Is Approved?": {"main": [[{"node": "Send Reply Email"}], [{"node": "Edit Message + Cleanup (Approved / Rejected)"}]]},
+    "Send Reply Email": {"main": [[{"node": "Edit Message + Cleanup (Approved / Rejected)"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Telegram", "Gmail", "n8n Data Tables"],
+    "companion_workflows": [
+      "Official Email Workflow → Telegram — classifies incoming official-inbox mail and posts it to this router.",
+      "Personal Email Workflow → Telegram — same triage pattern for the personal inbox."
+    ],
+    "security_note": "The webhook is currently configured with no authentication. For a self-hosted n8n instance exposed to the internet, this endpoint should be protected with a header-auth credential or IP allowlist."
+  }
+}

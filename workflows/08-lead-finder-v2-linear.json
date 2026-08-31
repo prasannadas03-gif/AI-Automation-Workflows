@@ -1,0 +1,66 @@
+{
+  "name": "RINDAX Lead Finder v2 — Linear, No Agent",
+  "description": "A cost-optimization case study: replaces an earlier AI-agent-based lead finder (~$2.80 per test run due to token accumulation across tool calls) with a straight linear pipeline — 5 rotating local-business searches/day via a Maps search API, deduplicated against Airtable, one AI call per lead for outreach copy (~300 tokens) — cutting cost to roughly $0.0002/day for 10-15 leads (~99.9% cheaper).",
+  "nodes": [
+    {
+      "name": "Daily 8 AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"triggerAtHour": 8}]}}
+    },
+    {
+      "name": "Build Search Categories",
+      "type": "n8n-nodes-base.code",
+      "notes": "15 predefined {query, niche, city} combinations across Indian cities and small-business niches (coaching centres, clinics, travel agents, photographers, micro agencies, salons/gyms, freelance consultants); rotates through 5 per day based on day-of-year so the same cities aren't searched every run"
+    },
+    {
+      "name": "Serper Maps Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/maps",
+        "headerParameters": {"parameters": [{"name": "X-API-KEY", "value": "YOUR_SERPER_API_KEY"}]}
+      }
+    },
+    {
+      "name": "Extract Top 3 Places",
+      "type": "n8n-nodes-base.code",
+      "notes": "Keeps only businesses with a phone number or website, takes the top 3 results per search"
+    },
+    {
+      "name": "Fetch Existing Companies",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Remove Duplicates",
+      "type": "n8n-nodes-base.code",
+      "notes": "Cross-checks new leads against existing Airtable company names and phone numbers before proceeding"
+    },
+    {
+      "name": "Save Lead to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "notes": "Creates the record with Temperature=Warm, Status=New, and a Why Fit note built from the business's rating/review count",
+      "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Telegram Summary",
+      "type": "n8n-nodes-base.telegram",
+      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+    }
+  ],
+  "connections": {
+    "Daily 8 AM IST": {"main": [[{"node": "Build Search Categories"}]]},
+    "Build Search Categories": {"main": [[{"node": "Serper Maps Search"}]]},
+    "Serper Maps Search": {"main": [[{"node": "Extract Top 3 Places"}]]},
+    "Extract Top 3 Places": {"main": [[{"node": "Fetch Existing Companies"}]]},
+    "Fetch Existing Companies": {"main": [[{"node": "Remove Duplicates"}]]},
+    "Remove Duplicates": {"main": [[{"node": "Save Lead to Airtable"}]]},
+    "Save Lead to Airtable": {"main": [[{"node": "Telegram Summary"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Serper Maps API", "Airtable", "Telegram"],
+    "security_note": "API keys and bot tokens must be stored in n8n's credential manager rather than pasted directly into HTTP Request node headers."
+  }
+}
