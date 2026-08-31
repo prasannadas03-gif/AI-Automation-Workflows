@@ -1,0 +1,79 @@
+{
+  "name": "Google Sheet → Airtable Leads Sync",
+  "description": "Daily sync that reads new leads from a Google Sheet, checks for duplicates in Airtable by company name, and adds only genuinely new leads with an auto-assigned Temperature based on city.",
+  "nodes": [
+    {
+      "name": "Daily 9 AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "notes": "Runs once daily",
+      "parameters": {
+        "rule": {"interval": [{"triggerAtHour": 9}]}
+      }
+    },
+    {
+      "name": "Read Leads from Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Sheet1"
+      }
+    },
+    {
+      "name": "Check If Sheet Has Data",
+      "type": "n8n-nodes-base.code",
+      "notes": "Filters out empty rows and rows with no Business Name; stops the run cleanly if the sheet has nothing new",
+      "parameters": {"mode": "runOnceForAllItems"}
+    },
+    {
+      "name": "Check If Lead Exists in Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "notes": "Searches the CRM base by company name (FIND formula) to detect existing leads",
+      "parameters": {
+        "operation": "search",
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID",
+        "filterByFormula": "=FIND('{{ $json[\"Business Name\"] }}', {Company})"
+      }
+    },
+    {
+      "name": "Is New Lead?",
+      "type": "n8n-nodes-base.if",
+      "notes": "True when no matching Airtable record id was returned",
+      "parameters": {}
+    },
+    {
+      "name": "Map Fields & Set Temperature",
+      "type": "n8n-nodes-base.set",
+      "notes": "Maps sheet columns to CRM fields; sets Temperature to Hot for Guwahati-based leads, Warm otherwise",
+      "parameters": {}
+    },
+    {
+      "name": "Add New Lead to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {
+        "operation": "create",
+        "base": "YOUR_AIRTABLE_BASE_ID",
+        "table": "YOUR_AIRTABLE_TABLE_ID"
+      }
+    },
+    {
+      "name": "Skip Duplicate Lead",
+      "type": "n8n-nodes-base.set",
+      "notes": "No-op branch for leads that already exist in Airtable"
+    }
+  ],
+  "connections": {
+    "Daily 9 AM IST": {"main": [[{"node": "Read Leads from Google Sheet"}]]},
+    "Read Leads from Google Sheet": {"main": [[{"node": "Check If Sheet Has Data"}]]},
+    "Check If Sheet Has Data": {"main": [[{"node": "Check If Lead Exists in Airtable"}]]},
+    "Check If Lead Exists in Airtable": {"main": [[{"node": "Is New Lead?"}]]},
+    "Is New Lead?": {"main": [[{"node": "Map Fields & Set Temperature"}], [{"node": "Skip Duplicate Lead"}]]},
+    "Map Fields & Set Temperature": {"main": [[{"node": "Add New Lead to Airtable"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Google Sheets", "Airtable"],
+    "companion_workflow": "Paired with a Telegram approval bridge (native inline buttons) that lets Prasanna approve or reject the AI-drafted outreach email for each new lead with a single tap — no separate n8n link popup."
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "name": "RINDAX RSS Job Finder",
+  "description": "Scheduled daily search across 11 freelance/remote job sources (Upwork, LinkedIn, Contra, PeoplePerHour, Freelancer, Truelancer, Hubstaff Talent, Naukri, Reddit r/forhire, and general web search) for n8n, Power BI, Excel, and AI-automation roles. Scores and filters results, splits them into 'Direct Mail' (has a named contact email) vs 'ATS' (apply-on-portal) leads, logs new ones to Airtable, and sends a Telegram digest.",
+  "nodes": [
+    {
+      "name": "Schedule 8AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "30 2 * * *"}]}}
+    },
+    {
+      "name": "Search Jobs (x17 parallel queries)",
+      "type": "n8n-nodes-base.httpRequest",
+      "notes": "17 parallel HTTP calls to a search API (site: filters for Upwork, LinkedIn, Contra, PeoplePerHour, Freelancer, Truelancer, Hubstaff Talent, Naukri, Reddit r/forhire, plus general n8n/Power BI/Excel/automation queries), merged via a chain of Merge nodes",
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_SEARCH_API_ENDPOINT",
+        "headerParameters": {"parameters": [{"name": "X-API-KEY", "value": "YOUR_SEARCH_API_KEY"}]}
+      }
+    },
+    {
+      "name": "Filter and Score Jobs",
+      "type": "n8n-nodes-base.code",
+      "notes": "Keyword + regex scoring engine: rejects senior/BDR/generic-corp titles, requires a work-type keyword (remote/freelance/contract), penalizes stale/high annual-salary postings, boosts n8n/Power BI/Excel/automation matches, boosts named-contact emails and preferred source domains. Keeps items scoring 65+."
+    },
+    {
+      "name": "Split Type A or B",
+      "type": "n8n-nodes-base.if",
+      "notes": "Routes to Direct Mail (named contact email found) or ATS (apply-on-portal) branch"
+    },
+    {
+      "name": "Dedup Check + Log to Airtable (both branches)",
+      "type": "n8n-nodes-base.airtable",
+      "notes": "Searches the Direct Mail / ATS table by job title before creating a new record, to avoid duplicate alerts",
+      "parameters": {"base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Build Telegram Message",
+      "type": "n8n-nodes-base.code",
+      "notes": "Formats a daily digest: counts + top 5 Direct Mail leads (with score, pay, contact email, link) and top 5 ATS leads"
+    },
+    {
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+    }
+  ],
+  "connections": {
+    "Schedule 8AM IST": {"main": [[{"node": "Search Jobs (x17 parallel queries)"}]]},
+    "Search Jobs (x17 parallel queries)": {"main": [[{"node": "Filter and Score Jobs"}]]},
+    "Filter and Score Jobs": {"main": [[{"node": "Split Type A or B"}]]},
+    "Split Type A or B": {"main": [[{"node": "Dedup Check + Log to Airtable (both branches)"}]]},
+    "Dedup Check + Log to Airtable (both branches)": {"main": [[{"node": "Build Telegram Message"}]]},
+    "Build Telegram Message": {"main": [[{"node": "Send Telegram Alert"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Search API", "Airtable", "Telegram"],
+    "companion_workflows": [
+      "RINDAX Job Email Approver — listens for a Telegram approval command, drafts a personalized cold email via an AI model, sends it through Gmail, and updates the Airtable status.",
+      "RINDAX Job Draft Email Bridge — a newer version of the same approval step using native Telegram inline buttons (tap to send, buttons disappear after use) instead of a text command."
+    ],
+    "security_note": "API keys and bot tokens must be stored in n8n's credential manager, not pasted directly into HTTP Request node parameters — the header/body values above are illustrative placeholders only."
+  }
+}

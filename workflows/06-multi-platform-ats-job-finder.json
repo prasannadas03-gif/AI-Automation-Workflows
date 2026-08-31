@@ -1,0 +1,87 @@
+{
+  "name": "RINDAX Multi-Platform ATS Job Finder",
+  "description": "Twice-daily scan of 11 job feeds across 6 ATS platforms (Himalayas, Arbeitnow, RemoteOK, WeWorkRemotely, Greenhouse, Lever, Ashby), each normalized into a common schema with freshness and hiring-intent scoring, keyword pre-filtered, then AI-scored by Gemini against a detailed fresher/junior-friendly candidate profile with hard rejection gates (seniority, strict years-of-experience, India exclusion, large enterprise, sales-heavy roles). Deduplicates against Airtable by URL/ID/composite-key and saves the top 10 new highest-priority jobs.",
+  "nodes": [
+    {
+      "name": "Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {"rule": {"interval": [{"triggerAtHour": 9}, {"triggerAtHour": 17}]}}
+    },
+    {
+      "name": "Feed 1-11 (Himalayas, Arbeitnow, RemoteOK, WeWorkRemotely, Greenhouse x3, Lever, Ashby x2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "notes": "11 parallel calls to public job-board APIs/RSS, each with onError: continueRegularOutput so one dead feed doesn't break the run"
+    },
+    {
+      "name": "Normalize RSS Data",
+      "type": "n8n-nodes-base.code",
+      "notes": "Branch-detects each feed's shape (Greenhouse/Ashby/Himalayas/Arbeitnow/RemoteOK/Lever/generic RSS) and maps every job into one common schema: title, canonical_url, company, location, description, freshness_status/score, hiring_intent_level/score, plus content hashes for future change-detection"
+    },
+    {
+      "name": "Keyword Pre-Filter",
+      "type": "n8n-nodes-base.code",
+      "notes": "Hard-negative filter (rejects senior/lead/manager titles, strict 3+yr experience, non-India-eligible, onsite-only, pure sales/BDR roles) then requires at least 1 strong or 2 supporting automation/n8n/API-integration keyword matches before the job is worth an AI call"
+    },
+    {
+      "name": "AI Skill Matching",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "notes": "Gemini call scoring each job 0-100 against a detailed candidate profile (fresher in AI automation, Assam/India remote, n8n + AI agent + Excel/Power BI skills) across 8 weighted components (experience, skill, fresher-friendliness, work arrangement, India eligibility, company size, communication fit, portfolio acceptance), with explicit hard gates that override the score",
+      "parameters": {"batching": {"batchSize": 3, "delayBetweenBatches": 1000}}
+    },
+    {
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "parameters": {"modelName": "models/gemini-3.1-flash-lite"}
+    },
+    {
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "notes": "Parses the model's JSON, computes a blended final_priority_score (60% AI match + 15% freshness + 15% hiring intent + 10% source quality) and assigns a priority tier"
+    },
+    {
+      "name": "Score >= 70 and Relevant",
+      "type": "n8n-nodes-base.filter"
+    },
+    {
+      "name": "Get Existing Airtable URLs",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Dedup Sort & Limit Top 10",
+      "type": "n8n-nodes-base.code",
+      "notes": "Cross-checks against existing Airtable URLs/Job IDs/composite keys, dedupes within the current batch, sorts by final priority score, and keeps only the top 10 brand-new jobs"
+    },
+    {
+      "name": "Save Top 10 to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID"}
+    },
+    {
+      "name": "Execution Summary",
+      "type": "n8n-nodes-base.code",
+      "notes": "Logs a run summary: total collected, prefilter-passed, AI-qualified, and new records saved"
+    }
+  ],
+  "connections": {
+    "Trigger": {"main": [[{"node": "Feed 1-11 (Himalayas, Arbeitnow, RemoteOK, WeWorkRemotely, Greenhouse x3, Lever, Ashby x2)"}]]},
+    "Feed 1-11 (Himalayas, Arbeitnow, RemoteOK, WeWorkRemotely, Greenhouse x3, Lever, Ashby x2)": {"main": [[{"node": "Normalize RSS Data"}]]},
+    "Normalize RSS Data": {"main": [[{"node": "Keyword Pre-Filter"}]]},
+    "Keyword Pre-Filter": {"main": [[{"node": "AI Skill Matching"}]]},
+    "AI Skill Matching": {"main": [[{"node": "Parse AI JSON"}]]},
+    "Parse AI JSON": {"main": [[{"node": "Score >= 70 and Relevant"}]]},
+    "Score >= 70 and Relevant": {"main": [[{"node": "Get Existing Airtable URLs"}]]},
+    "Get Existing Airtable URLs": {"main": [[{"node": "Dedup Sort & Limit Top 10"}]]},
+    "Dedup Sort & Limit Top 10": {"main": [[{"node": "Save Top 10 to Airtable"}]]},
+    "Save Top 10 to Airtable": {"main": [[{"node": "Execution Summary"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Google Gemini", "Airtable", "6 public ATS/job-board APIs"],
+    "companion_workflows": [
+      "RINDAX ATS Job Proposal Notifier — sends a Telegram notification with the proposal draft and job URL, and updates Airtable status.",
+      "RINDAX ATS Job Applied Handler — Telegram callback listener that marks a job Applied in Airtable when the 'Mark Applied' inline button is tapped."
+    ]
+  }
+}
