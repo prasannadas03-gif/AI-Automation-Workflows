@@ -37,7 +37,7 @@ Webhook → Normalize Question → Retrieve Top-K Chunks → Assess Retrieval Su
 → [Sufficient: Grounded Answer Agent → Respond] / [Insufficient: Fallback → Telegram Escalation → Respond]
 ```
 
-![Enterprise KB RAG Workflow](./assets/Enterprise%20KB%20RAG.PNG)
+![Enterprise KB RAG Workflow](./assets/Enterprise%20KB%20RAG.webp)
 
 ---
 
@@ -56,7 +56,7 @@ Gmail Trigger (unread) → Classify Email (Gemini) → Route by Category
    → Send: Gmail Reply + Mark Sent / Reject: Mark Rejected]
 ```
 
-![Personal Email Workflow → Telegram](./assets/Personal%20Email%20Workflow.PNG)
+![Personal Email Workflow → Telegram](./assets/Personal%20Email%20Workflow.webp)
 
 ---
 
@@ -74,7 +74,7 @@ Trigger (manual / 8 AM & 4 PM) → 5 parallel feed fetches → Normalize & Signa
 → Skeptical Gemini Audit → Validation Gate → Format & Enrich → Save to Airtable CRM
 ```
 
-![AI Lead Generation Automation Workflow](./assets/AI%20Lead%20Generation%20Automation.PNG)
+![AI Lead Generation Automation Workflow](./assets/AI%20Lead%20Generation%20Automation.webp)
 
 ---
 
@@ -92,7 +92,7 @@ WhatsApp Trigger → Normalize Input → Lookup Client by Phone Number (Supabase
 → Send WhatsApp Reply
 ```
 
-![Multi-Tenant WhatsApp AI Agent Workflow](./assets/Multi-Tenant%20WhatsApp%20AI%20Agent.PNG)
+![Multi-Tenant WhatsApp AI Agent Workflow](./assets/Multi-Tenant%20WhatsApp%20AI%20Agent.webp)
 
 ---
 
