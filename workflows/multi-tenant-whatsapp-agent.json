@@ -1,0 +1,36 @@
+{
+  "name": "Multi-Tenant WhatsApp AI Agent",
+  "description": "One reusable WhatsApp support agent deployable per client. Resolves which business owns the inbound number, loads that client's own knowledge text and system prompt from Supabase, answers strictly from it via Claude with per-conversation memory, and replies on WhatsApp \u2014 never inventing details outside the client's knowledge doc.",
+  "nodes": [
+    {"name": "WhatsApp Message Received", "type": "n8n-nodes-base.whatsAppTrigger", "notes": "Requires a WhatsApp Business Cloud API credential", "parameters": {"updates": ["messages"]}},
+    {"name": "Normalize Input", "type": "n8n-nodes-base.set", "notes": "Extracts waId, messageText, contactName, phoneNumberId from the inbound webhook payload"},
+    {
+      "name": "Lookup Client by Phone Number",
+      "type": "n8n-nodes-base.supabase",
+      "notes": "Requires a Supabase credential. Expects a 'clients' table with columns: phone_number_id, business_name, system_prompt, knowledge_doc",
+      "parameters": {"operation": "getAll", "tableId": "clients", "filters": {"conditions": [{"keyName": "phone_number_id", "condition": "eq", "keyValue": "={{ $json.phoneNumberId }}"}]}}
+    },
+    {"name": "Build Session Context", "type": "n8n-nodes-base.set", "notes": "Builds a per-client, per-contact sessionKey ({clientId}_{waId}) for conversation memory"},
+    {
+      "name": "WhatsApp Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "notes": "System prompt is built from the client's own system_prompt + knowledgeDoc. Instructed to say so honestly and offer human handoff if the answer isn't covered, never invent details, and keep replies short/plain-text for WhatsApp"
+    },
+    {"name": "Claude Haiku Model", "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic", "notes": "Requires an Anthropic API credential", "parameters": {"model": "claude-haiku-4-5", "options": {"maxTokensToSample": 1024, "temperature": 0.4}}},
+    {"name": "Conversation Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow", "parameters": {"sessionIdType": "customKey", "contextWindowLength": 10}},
+    {"name": "Send WhatsApp Reply", "type": "n8n-nodes-base.whatsApp", "parameters": {"operation": "send"}}
+  ],
+  "connections": {
+    "WhatsApp Message Received": {"main": [[{"node": "Normalize Input"}]]},
+    "Normalize Input": {"main": [[{"node": "Lookup Client by Phone Number"}]]},
+    "Lookup Client by Phone Number": {"main": [[{"node": "Build Session Context"}]]},
+    "Build Session Context": {"main": [[{"node": "WhatsApp Support Agent"}]]},
+    "WhatsApp Support Agent": {"main": [[{"node": "Send WhatsApp Reply"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "WhatsApp Cloud API", "Supabase", "Claude Haiku 4.5"],
+    "setup_notes": "Requires: a WhatsApp Business Cloud API credential, a Supabase credential with a 'clients' table (phone_number_id, business_name, system_prompt, knowledge_doc), and an Anthropic API credential. Each row in 'clients' is one tenant \u2014 add a new row to onboard a new business, no workflow changes needed. Replace all YOUR_* placeholders before use."
+  }
+}

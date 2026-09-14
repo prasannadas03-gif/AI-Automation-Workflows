@@ -1,0 +1,84 @@
+{
+  "name": "Enterprise KB RAG - Ingestion & Q&A",
+  "description": "Combined single-canvas version: document ingestion and Q&A as two independent webhook-triggered branches. Ingestion dedupes against Postgres before embedding into a Supabase pgvector store; Q&A retrieves top-K chunks, checks retrieval sufficiency, and answers strictly from retrieved context via a grounded Gemini agent, with a Telegram escalation fallback when no answer is found.",
+  "nodes": [
+    {
+      "name": "Document Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {"httpMethod": "POST", "path": "kb-ingest"}
+    },
+    {
+      "name": "Clean & Normalize Text",
+      "type": "n8n-nodes-base.code",
+      "notes": "Normalizes whitespace/line endings and reads document_name, document_type, category, product, version, source from the request body"
+    },
+    {
+      "name": "Check If Already Ingested",
+      "type": "n8n-nodes-base.postgres",
+      "notes": "Requires a Postgres credential pointing at your Supabase/Postgres instance",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*)::int as cnt FROM documents WHERE metadata->>'document_name' = $1 AND metadata->>'version' = $2"
+      }
+    },
+    {"name": "Already Ingested?", "type": "n8n-nodes-base.if"},
+    {
+      "name": "Notify Skipped Duplicate",
+      "type": "n8n-nodes-base.telegram",
+      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+    },
+    {
+      "name": "Insert into Knowledge Base",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "notes": "Requires a Supabase credential (project URL + service role key) and a pgvector-enabled 'documents' table with a match_documents query function",
+      "parameters": {"mode": "insert", "tableName": "YOUR_SUPABASE_TABLE"}
+    },
+    {"name": "Gemini Embeddings (Ingest)", "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini", "notes": "Requires a Google Gemini API credential"},
+    {"name": "KB Data Loader", "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader", "notes": "Attaches document_name/type/category/product/version/source as vector store metadata"},
+    {"name": "Notify Ingestion Success", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
+    {"name": "Ask Question Webhook", "type": "n8n-nodes-base.webhook", "parameters": {"httpMethod": "POST", "path": "kb-ask", "responseMode": "responseNode"}},
+    {"name": "Normalize Question", "type": "n8n-nodes-base.code", "notes": "Reads question and session_id from the request body"},
+    {
+      "name": "Retrieve Top-K Chunks",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "parameters": {"mode": "load", "tableName": "YOUR_SUPABASE_TABLE", "topK": 5}
+    },
+    {"name": "Gemini Embeddings (Query)", "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini"},
+    {"name": "Assess Retrieval Sufficiency", "type": "n8n-nodes-base.code", "notes": "Flags sufficient=true when at least 1 chunk was retrieved and combined context is 80+ characters"},
+    {"name": "Sufficient Context?", "type": "n8n-nodes-base.if"},
+    {
+      "name": "Grounded Answer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "notes": "System prompt instructs the agent to answer ONLY from the retrieved context and never use outside knowledge"
+    },
+    {"name": "Gemini Answer Model", "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini"},
+    {"name": "Session Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow", "parameters": {"sessionIdType": "customKey", "contextWindowLength": 6}},
+    {"name": "Format Success Response", "type": "n8n-nodes-base.code"},
+    {"name": "Respond With Answer", "type": "n8n-nodes-base.respondToWebhook"},
+    {"name": "Build Fallback Answer", "type": "n8n-nodes-base.code", "notes": "Returns a polite 'not in the knowledge base yet' message and flags escalated=true"},
+    {"name": "Notify No-Answer Escalation", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
+    {"name": "Respond With Fallback", "type": "n8n-nodes-base.respondToWebhook"}
+  ],
+  "connections": {
+    "Document Upload Webhook": {"main": [[{"node": "Clean & Normalize Text"}]]},
+    "Clean & Normalize Text": {"main": [[{"node": "Check If Already Ingested"}]]},
+    "Check If Already Ingested": {"main": [[{"node": "Already Ingested?"}]]},
+    "Already Ingested?": {"main": [[{"node": "Notify Skipped Duplicate"}], [{"node": "Insert into Knowledge Base"}]]},
+    "Insert into Knowledge Base": {"main": [[{"node": "Notify Ingestion Success"}]]},
+    "Ask Question Webhook": {"main": [[{"node": "Normalize Question"}]]},
+    "Normalize Question": {"main": [[{"node": "Retrieve Top-K Chunks"}]]},
+    "Retrieve Top-K Chunks": {"main": [[{"node": "Assess Retrieval Sufficiency"}]]},
+    "Assess Retrieval Sufficiency": {"main": [[{"node": "Sufficient Context?"}]]},
+    "Sufficient Context?": {"main": [[{"node": "Grounded Answer Agent"}], [{"node": "Build Fallback Answer"}]]},
+    "Grounded Answer Agent": {"main": [[{"node": "Format Success Response"}]]},
+    "Format Success Response": {"main": [[{"node": "Respond With Answer"}]]},
+    "Build Fallback Answer": {"main": [[{"node": "Notify No-Answer Escalation"}]]},
+    "Notify No-Answer Escalation": {"main": [[{"node": "Respond With Fallback"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Supabase (pgvector)", "Postgres", "Google Gemini", "Telegram"],
+    "setup_notes": "Requires: a Postgres/Supabase credential, a Supabase project with pgvector enabled and a 'documents' table + match_documents query function, a Google Gemini API credential, and a Telegram bot credential. Replace all YOUR_* placeholders before use."
+  }
+}

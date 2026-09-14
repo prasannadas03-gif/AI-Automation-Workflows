@@ -1,0 +1,66 @@
+{
+  "name": "Personal Email Workflow \u2192 Telegram",
+  "description": "Gmail inbox triage with an AI classifier that sorts every unread email into promotional / important / needs-reply, drafts a ready-to-send reply for anything needing one, and routes it to Telegram with inline Send/Reject buttons \u2014 a tap sends the Gmail reply (with signature) and marks the thread read, or rejects it with no email sent.",
+  "nodes": [
+    {"name": "New Email Received", "type": "n8n-nodes-base.gmailTrigger", "notes": "Polls every minute for unread mail. Requires a Gmail OAuth2 credential", "parameters": {"filters": {"readStatus": "unread"}}},
+    {"name": "Throttle Before Classify", "type": "n8n-nodes-base.wait", "notes": "Short delay so the full email body is available before classification"},
+    {
+      "name": "Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "notes": "System prompt should describe YOUR business/role/services so the AI can write accurate, grounded draft replies. Classifies into promotional / important / needs_reply and returns {category, summary, draft_reply}"
+    },
+    {"name": "Gemini Model", "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini", "notes": "Requires a Google Gemini API credential"},
+    {"name": "Email Classification Schema", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "parameters": {"jsonSchemaExample": "{\"category\": \"important\", \"summary\": \"...\", \"draft_reply\": \"...\"}"}},
+    {"name": "Route by Category", "type": "n8n-nodes-base.switch", "notes": "3 outputs: promotional / important / needs_reply"},
+    {"name": "Mark as Read", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
+    {"name": "Notify Important Email", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
+    {"name": "Mark Important Email as Read", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
+    {"name": "Store Draft Reply", "type": "n8n-nodes-base.dataTable", "notes": "Create an n8n Data Table with columns: gmailMessageId, gmailThreadId, fromEmail, subject, draftReply, status, telegramChatId, telegramMessageId", "parameters": {"dataTableId": "YOUR_DATA_TABLE_ID"}},
+    {
+      "name": "Send Draft for Approval",
+      "type": "n8n-nodes-base.telegram",
+      "notes": "Sends the draft with inline Send/Reject buttons (callback_data: send:<rowId> / reject:<rowId>)",
+      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+    },
+    {"name": "Save Telegram Message Info", "type": "n8n-nodes-base.dataTable", "parameters": {"dataTableId": "YOUR_DATA_TABLE_ID"}},
+    {"name": "Telegram Button Clicked", "type": "n8n-nodes-base.telegramTrigger", "parameters": {"updates": ["callback_query"]}},
+    {"name": "Parse Callback Data", "type": "n8n-nodes-base.code", "notes": "Splits callback_data into action + rowId"},
+    {"name": "Answer Callback Query", "type": "n8n-nodes-base.telegram", "parameters": {"resource": "callback"}},
+    {"name": "Remove Buttons from Message", "type": "n8n-nodes-base.telegram", "parameters": {"operation": "editMessageText"}},
+    {"name": "Get Draft Row", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "get", "dataTableId": "YOUR_DATA_TABLE_ID"}},
+    {"name": "Is Send Action?", "type": "n8n-nodes-base.if"},
+    {"name": "Send Reply Email", "type": "n8n-nodes-base.gmail", "notes": "Appends a signature block after the AI-drafted reply", "parameters": {"sendTo": "={{ $json.fromEmail }}"}},
+    {"name": "Mark Reply Email as Read - Sent", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
+    {"name": "Mark Row as Sent", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "update", "dataTableId": "YOUR_DATA_TABLE_ID"}},
+    {"name": "Notify Sent Confirmation", "type": "n8n-nodes-base.telegram"},
+    {"name": "Mark Row as Rejected", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "update", "dataTableId": "YOUR_DATA_TABLE_ID"}},
+    {"name": "Mark Reply Email as Read - Rejected", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
+    {"name": "Notify Rejected Confirmation", "type": "n8n-nodes-base.telegram"}
+  ],
+  "connections": {
+    "New Email Received": {"main": [[{"node": "Throttle Before Classify"}]]},
+    "Throttle Before Classify": {"main": [[{"node": "Classify Email"}]]},
+    "Classify Email": {"main": [[{"node": "Route by Category"}]]},
+    "Route by Category": {"main": [[{"node": "Mark as Read"}], [{"node": "Notify Important Email"}], [{"node": "Store Draft Reply"}]]},
+    "Notify Important Email": {"main": [[{"node": "Mark Important Email as Read"}]]},
+    "Store Draft Reply": {"main": [[{"node": "Send Draft for Approval"}]]},
+    "Send Draft for Approval": {"main": [[{"node": "Save Telegram Message Info"}]]},
+    "Telegram Button Clicked": {"main": [[{"node": "Parse Callback Data"}]]},
+    "Parse Callback Data": {"main": [[{"node": "Answer Callback Query"}]]},
+    "Answer Callback Query": {"main": [[{"node": "Remove Buttons from Message"}]]},
+    "Remove Buttons from Message": {"main": [[{"node": "Get Draft Row"}]]},
+    "Get Draft Row": {"main": [[{"node": "Is Send Action?"}]]},
+    "Is Send Action?": {"main": [[{"node": "Send Reply Email"}], [{"node": "Mark Row as Rejected"}]]},
+    "Send Reply Email": {"main": [[{"node": "Mark Reply Email as Read - Sent"}]]},
+    "Mark Reply Email as Read - Sent": {"main": [[{"node": "Mark Row as Sent"}]]},
+    "Mark Row as Sent": {"main": [[{"node": "Notify Sent Confirmation"}]]},
+    "Mark Row as Rejected": {"main": [[{"node": "Mark Reply Email as Read - Rejected"}]]},
+    "Mark Reply Email as Read - Rejected": {"main": [[{"node": "Notify Rejected Confirmation"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Gmail", "Google Gemini", "Telegram", "n8n Data Tables"],
+    "setup_notes": "Requires: a Gmail OAuth2 credential, a Google Gemini API credential, a Telegram bot credential, and an n8n Data Table (see Store Draft Reply node notes for the schema). Replace all YOUR_* placeholders and rewrite the Classify Email system prompt with your own business details before use."
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "AI Lead Generation Automation",
+  "description": "100% free-tier B2B lead qualification engine. Scans free open job/signal feeds (Arbeitnow, Jobicy, RemoteOK, Hacker News), keyword-scores for automation pain, filters duplicates against your CRM, runs a dual-stage Gemini qualification (a primary qualifier, then a deliberately skeptical auditor with veto power), and saves only approved leads.",
+  "nodes": [
+    {"name": "Manual Trigger", "type": "n8n-nodes-base.manualTrigger"},
+    {"name": "Schedule Daily 8 AM & 4 PM", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {"rule": {"interval": [{"triggerAtHour": 8}, {"triggerAtHour": 16}]}}},
+    {"name": "Fetch Arbeitnow Free API", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed", "parameters": {"url": "https://www.arbeitnow.com/api/job-board-api"}},
+    {"name": "Fetch Jobicy Free API", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed", "parameters": {"url": "https://jobicy.com/api/v2/remote-jobs?count=40"}},
+    {"name": "Fetch RemoteOK Free Feed", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed. Send a User-Agent header or RemoteOK blocks the request", "parameters": {"url": "https://remoteok.com/api"}},
+    {"name": "Fetch HN Automation Pain Signals", "type": "n8n-nodes-base.httpRequest", "notes": "HN Algolia search, public, no credential needed", "parameters": {"url": "https://hn.algolia.com/api/v1/search_by_date?query=%22need+automation%22+OR+%22automate+this+process%22&tags=(comment,story)&hitsPerPage=50"}},
+    {"name": "Fetch HN Manual Process Signals", "type": "n8n-nodes-base.httpRequest", "notes": "HN Algolia search, public, no credential needed", "parameters": {"url": "https://hn.algolia.com/api/v1/search_by_date?query=%22still+using+spreadsheets%22+OR+%22manually+update%22&tags=(comment,story)&hitsPerPage=50"}},
+    {"name": "Combine Feeds", "type": "n8n-nodes-base.merge", "parameters": {"numberInputs": 5}},
+    {"name": "Normalize & Signal Scoring", "type": "n8n-nodes-base.code", "notes": "Normalizes all feed shapes into a common lead schema and keyword-scores each item across 9 automation-pain signal groups"},
+    {"name": "Fetch Existing CRM Leads", "type": "n8n-nodes-base.airtable", "notes": "Requires an Airtable credential", "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID", "table": "YOUR_AIRTABLE_TABLE_ID"}},
+    {"name": "Filter Duplicates & Enterprises", "type": "n8n-nodes-base.code", "notes": "Drops known enterprise domains and anything already in the CRM by URL or company name"},
+    {"name": "Primary Gemini AI Qualification", "type": "@n8n/n8n-nodes-langchain.googleGemini", "notes": "Requires a Google Gemini API credential. Scores each lead 0-100 against a detailed rubric and returns qualified/lead_score/buying_intent/etc"},
+    {"name": "Parse & Validate Primary AI JSON", "type": "n8n-nodes-base.code", "notes": "Parses/repairs the AI's JSON output with sane fallbacks on malformed output"},
+    {"name": "Check Qualification Gate", "type": "n8n-nodes-base.if", "notes": "qualified=true AND lead_score>=70 AND target_fit != REJECT AND ai_parse_status=SUCCESS"},
+    {"name": "Skeptical AI Validator", "type": "@n8n/n8n-nodes-langchain.googleGemini", "notes": "A second, deliberately skeptical Gemini pass with hard veto power over the primary qualification"},
+    {"name": "Check Validation Gate", "type": "n8n-nodes-base.if", "notes": "Passes only if the skeptical auditor's audit_pass/approved flag is true"},
+    {"name": "Format & Enrich Lead for CRM", "type": "n8n-nodes-base.code", "notes": "Merges both AI passes into final score/priority/temperature and maps to your Airtable field IDs"},
+    {"name": "Save To RINDAX Leads CRM", "type": "n8n-nodes-base.airtable", "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID", "table": "YOUR_AIRTABLE_TABLE_ID"}}
+  ],
+  "connections": {
+    "Manual Trigger": {"main": [[{"node": "Fetch Arbeitnow Free API"}, {"node": "Fetch Jobicy Free API"}, {"node": "Fetch RemoteOK Free Feed"}, {"node": "Fetch HN Automation Pain Signals"}, {"node": "Fetch HN Manual Process Signals"}]]},
+    "Schedule Daily 8 AM & 4 PM": {"main": [[{"node": "Fetch Arbeitnow Free API"}, {"node": "Fetch Jobicy Free API"}, {"node": "Fetch RemoteOK Free Feed"}, {"node": "Fetch HN Automation Pain Signals"}, {"node": "Fetch HN Manual Process Signals"}]]},
+    "Fetch Arbeitnow Free API": {"main": [[{"node": "Combine Feeds"}]]},
+    "Fetch Jobicy Free API": {"main": [[{"node": "Combine Feeds"}]]},
+    "Fetch RemoteOK Free Feed": {"main": [[{"node": "Combine Feeds"}]]},
+    "Fetch HN Automation Pain Signals": {"main": [[{"node": "Combine Feeds"}]]},
+    "Fetch HN Manual Process Signals": {"main": [[{"node": "Combine Feeds"}]]},
+    "Combine Feeds": {"main": [[{"node": "Normalize & Signal Scoring"}]]},
+    "Normalize & Signal Scoring": {"main": [[{"node": "Fetch Existing CRM Leads"}, {"node": "Filter Duplicates & Enterprises"}]]},
+    "Filter Duplicates & Enterprises": {"main": [[{"node": "Primary Gemini AI Qualification"}]]},
+    "Primary Gemini AI Qualification": {"main": [[{"node": "Parse & Validate Primary AI JSON"}]]},
+    "Parse & Validate Primary AI JSON": {"main": [[{"node": "Check Qualification Gate"}]]},
+    "Check Qualification Gate": {"main": [[{"node": "Skeptical AI Validator"}]]},
+    "Skeptical AI Validator": {"main": [[{"node": "Check Validation Gate"}]]},
+    "Check Validation Gate": {"main": [[{"node": "Format & Enrich Lead for CRM"}]]},
+    "Format & Enrich Lead for CRM": {"main": [[{"node": "Save To RINDAX Leads CRM"}]]}
+  },
+  "meta": {
+    "built_by": "Prasanna Kumar Das | RINDAX",
+    "website": "https://rindax.com",
+    "tools_used": ["n8n", "Google Gemini (dual-stage)", "Airtable"],
+    "setup_notes": "Requires: a Google Gemini API credential and an Airtable credential. The 5 fetch nodes hit public, free, no-auth APIs. Replace all YOUR_* placeholders before use."
+  }
+}
