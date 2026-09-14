@@ -12,7 +12,7 @@ This repository showcases production-ready AI automation workflows built with **
 
 | Document | Description |
 |---|---|
-| [📋 AI Automation Capability Statement (Download PDF)](https://github.com/prasannadas03-gif/ai-automation-workflows/raw/main/Prasanna_Kumar_Das_AI_Automation_Capability_Statement.pdf) | Full service overview, tech stack, and case studies |
+| [📋 Resume (Download PDF)](https://github.com/prasannadas03-gif/ai-automation-workflows/raw/main/Prasanna_Kumar_Das_AI_Automation_Capability_Statement.pdf) | AI Automation & Workflow Engineer — experience, key projects, and skills |
 | [📊 Data Analytics Portfolio](https://github.com/prasannadas03-gif/Data-analytics-portfolio) | Power BI & Excel dashboard projects |
 
 ---
