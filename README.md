@@ -37,7 +37,7 @@ Webhook → Normalize Question → Retrieve Top-K Chunks → Assess Retrieval Su
 → [Sufficient: Grounded Answer Agent → Respond] / [Insufficient: Fallback → Telegram Escalation → Respond]
 ```
 
-![Enterprise KB RAG Workflow](./assets/Enterprise%20KB%20RAG.webp)
+![Enterprise KB RAG Workflow](./assets/Enterprise%20KB%20RAG.PNG)
 
 ---
 
@@ -92,7 +92,7 @@ WhatsApp Trigger → Normalize Input → Lookup Client by Phone Number (Supabase
 → Send WhatsApp Reply
 ```
 
-![Multi-Tenant WhatsApp AI Agent Workflow](./assets/Multi-Tenant%20WhatsApp%20AI%20Agent.webp)
+![Multi-Tenant WhatsApp AI Agent Workflow](./assets/Multi-Tenant%20WhatsApp%20AI%20Agent.PNG)
 
 ---
 
