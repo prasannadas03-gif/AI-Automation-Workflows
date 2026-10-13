@@ -5,10 +5,10 @@
 This repository documents AI automation workflows built with **n8n**, **Claude AI**, **Google Gemini**, **Airtable**, **Gmail**, **Supabase**, and **Telegram**, covering content, lead generation, job search, and inbox automation.
 
 > ℹ️ **About the `.json` files**
-> - `workflows/03-crm-outreach-agent.json` and `workflows/enterprise-kb-rag.json` are **sanitized exports of the real n8n workflows**. In n8n, use *Import from File*, then re-select your own credentials and replace every `YOUR_*` placeholder. The CRM agent is exported **inactive** and can send real email, so review it before activating.
+> - These six are **sanitized exports of the real n8n workflows**: `03-crm-outreach-agent.json`, `enterprise-kb-rag.json`, `personal-email-telegram.json`, `ai-lead-generation-automation.json`, `multi-tenant-whatsapp-agent.json`, and `02-rss-social-media-post.json`. In n8n, use *Import from File*, then re-select your own credentials and replace every `YOUR_*` placeholder. Several of them can send real email, WhatsApp, or social posts, so review them before activating.
 > - Every other `.json` file is a simplified **workflow blueprint** (nodes, logic, stack, design decisions), not a one-click import.
 >
-> All credentials, API keys, IDs, and chat identifiers have been removed or replaced with placeholders. Screenshots of the real canvases are in `assets/` and in each section below.
+> All credentials, API keys, IDs, chat identifiers, and personal contact details have been removed or replaced with placeholders. The exports have not been tested on a clean n8n instance, so expect to fix credentials and IDs on first import. Screenshots of the real canvases are in `assets/` and in each section below.
 
 ---
 
@@ -49,9 +49,9 @@ Telegram message → Normalize Question → Retrieve Top-K Chunks (filtered by c
 ---
 
 ### 🆕 Personal Email Workflow → Telegram
-**File:** `workflows/personal-email-telegram.json` (blueprint)
+**File:** `workflows/personal-email-telegram.json` (importable export)
 
-Gmail inbox triage with a Gemini classifier that sorts every unread email into promotional / important / needs-reply, drafts a ready-to-send reply for anything needing one, and routes it to Telegram with inline Send/Reject buttons — a tap sends the Gmail reply (with signature) and marks the thread read, or rejects it with no email sent.
+Gmail inbox triage with a Gemini classifier that sorts every unread email into promotional / important / needs-reply, drafts a ready-to-send reply for anything needing one, and routes it to Telegram with inline Send/Reject buttons — a tap sends the Gmail reply (with signature) and marks the thread read, or rejects it with no email sent. The classifier prompt and reply signature in the export are templates: fill in your own name, services, and contact details.
 
 **Stack:** n8n · Gmail · Google Gemini · Telegram · n8n Data Tables
 
@@ -68,7 +68,7 @@ Gmail Trigger (unread) → Classify Email (Gemini) → Route by Category
 ---
 
 ### 🆕 AI Lead Generation Automation
-**File:** `workflows/ai-lead-generation-automation.json` (blueprint)
+**File:** `workflows/ai-lead-generation-automation.json` (importable export)
 
 Zero-cost B2B lead qualification engine: pulls from free job-board APIs (Arbeitnow, Jobicy, RemoteOK) and Hacker News signal search, keyword-scores for automation pain, dedupes against the CRM, then runs candidates through a two-stage Gemini pipeline — a primary qualifier followed by a deliberately skeptical auditor with veto power — before saving to Airtable.
 
@@ -86,16 +86,16 @@ Trigger (manual / 8 AM & 4 PM) → 5 parallel feed fetches → Normalize & Signa
 ---
 
 ### 🆕 Multi-Tenant WhatsApp AI Agent
-**File:** `workflows/multi-tenant-whatsapp-agent.json` (blueprint)
+**File:** `workflows/multi-tenant-whatsapp-agent.json` (importable export)
 
-One reusable WhatsApp support agent deployable per client: resolves which business owns the inbound number, loads that client's own knowledge text and system prompt from Supabase, answers strictly from it via Claude Haiku with per-conversation memory, and replies on WhatsApp — never inventing details outside the client's knowledge doc.
+One reusable WhatsApp support agent deployable per client: resolves which business owns the inbound number, loads that client's own knowledge text and system prompt from Supabase, answers strictly from it via a Gemini agent with per-conversation memory, and replies on WhatsApp. If the answer isn't in the client's knowledge doc, the agent says so and offers a human handoff instead of inventing details.
 
-**Stack:** n8n · WhatsApp Cloud API · Supabase · Claude Haiku 4.5
+**Stack:** n8n · WhatsApp Cloud API · Supabase · Google Gemini
 
 **Flow:**
 ```
-WhatsApp Trigger → Normalize Input → Lookup Client by Phone Number (Supabase)
-→ Build Session Context → WhatsApp Support Agent (Claude Haiku, per-client memory)
+WhatsApp Trigger → Normalize Input → Skip Non-Message Events → Lookup Client by Phone Number (Supabase)
+→ Build Session Context → WhatsApp Support Agent (Gemini, per-client memory)
 → Send WhatsApp Reply
 ```
 
@@ -121,16 +121,16 @@ Schedule Trigger → Google Sheets (fetch pending post) → Claude AI (generate 
 ---
 
 ### 2. 📡 RSS Feed → Social Media Pipeline
-**File:** `workflows/02-rss-social-media-post.json` (blueprint)
+**File:** `workflows/02-rss-social-media-post.json` (importable export)
 
-Fully automated pipeline that monitors a blog RSS feed and instantly publishes new articles to all 3 social platforms — zero manual input required.
+Fully automated pipeline that monitors a blog RSS feed (checked twice daily) and publishes new articles to LinkedIn, Facebook, and Instagram with Claude-written captions — no manual input required. On Facebook it also posts the article link as a comment and likes the post.
 
-**Stack:** n8n · RSS Feed Trigger · HTML Parser · Claude AI (via OpenRouter) · LinkedIn · Facebook · Instagram
+**Stack:** n8n · RSS Feed Trigger · HTML Parser · Claude Haiku 4.5 (via OpenRouter) · LinkedIn · Facebook · Instagram
 
 **Flow:**
 ```
-RSS Feed Trigger → HTML Parser (extract image) → Claude AI (generate captions)
-→ Facebook Post → LinkedIn Post → Instagram Publish
+RSS Feed Trigger → HTML Parser (extract image) → Claude (generate captions)
+→ Facebook Post (+ link comment + like) / LinkedIn Post (with image) / Instagram Publish (+ link comment)
 ```
 
 ![RSS Feed Social Media Pipeline Workflow](./assets/RSS%20Feed_Social%20Media%20Pipeline.PNG)
@@ -282,12 +282,12 @@ Paired with separate Official-inbox and Personal-inbox classification workflows 
 
 ## 🛠️ How to Use These Files
 
-**Importable exports** (`03-crm-outreach-agent.json`, `enterprise-kb-rag.json`):
+**Importable exports** (`02-rss-social-media-post.json`, `03-crm-outreach-agent.json`, `enterprise-kb-rag.json`, `personal-email-telegram.json`, `ai-lead-generation-automation.json`, `multi-tenant-whatsapp-agent.json`):
 1. In n8n choose *Import from File* and select the `.json`.
-2. Create credentials with n8n's credential manager (Airtable, Gmail, Anthropic, Google Gemini, Supabase, Postgres, Google Drive, Telegram, header auth) and attach them to the nodes. Never paste API keys into node parameters.
-3. Replace every `YOUR_*` placeholder (Airtable base/table/field IDs, Telegram chat ID, Drive folder ID, webhook path, Serper key).
-4. For the RAG workflow, create a pgvector-enabled `documents` table and a `match_documents` function in Supabase.
-5. Test with manual executions before activating anything that sends email.
+2. Create credentials with n8n's credential manager (Airtable, Gmail, Anthropic, OpenRouter, Google Gemini, Supabase, Postgres, Google Drive, Telegram, WhatsApp, LinkedIn, Facebook Graph, header auth) and attach them to the nodes. Never paste API keys into node parameters.
+3. Replace every `YOUR_*` placeholder (Airtable base/table/field IDs, Telegram chat ID, data table ID, Facebook page / Instagram account / LinkedIn person IDs, blog feed URL, Drive folder ID, webhook path, Serper key, and the name and contact details in prompts and signatures).
+4. For the RAG workflow, create a pgvector-enabled `documents` table and a `match_documents` function in Supabase. For the WhatsApp agent, create a `clients` table with `phone_number_id`, `business_name`, `system_prompt`, and `knowledge_doc` columns. For the email workflow, create an n8n Data Table with the columns shown in the Store Draft Reply node.
+5. Test with manual executions before activating anything that sends email, messages, or posts.
 
 **Blueprints** (all other `.json` files): read the nodes, notes, and `connections` map, and use the **Flow** diagram as the build order when recreating the workflow in your own n8n instance.
 
