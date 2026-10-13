@@ -1,84 +1,1119 @@
 {
   "name": "Enterprise KB RAG - Ingestion & Q&A",
-  "description": "Combined single-canvas version: document ingestion and Q&A as two independent webhook-triggered branches. Ingestion dedupes against Postgres before embedding into a Supabase pgvector store; Q&A retrieves top-K chunks, checks retrieval sufficiency, and answers strictly from retrieved context via a grounded Gemini agent, with a Telegram escalation fallback when no answer is found.",
   "nodes": [
     {
+      "parameters": {
+        "formTitle": "Upload Knowledge Base Document",
+        "formDescription": "Upload a PDF to add it to the knowledge base.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Document Name",
+              "fieldName": "document_name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Category",
+              "fieldName": "category",
+              "placeholder": "e.g. Course, Policy, FAQ"
+            },
+            {
+              "fieldLabel": "Product",
+              "fieldName": "product",
+              "placeholder": "e.g. Python Course"
+            },
+            {
+              "fieldLabel": "Version",
+              "fieldName": "version",
+              "defaultValue": "1.0"
+            },
+            {
+              "fieldLabel": "Client ID",
+              "fieldName": "client_id",
+              "placeholder": "which business this belongs to",
+              "defaultValue": "default_client"
+            },
+            {
+              "fieldLabel": "PDF File",
+              "fieldType": "file",
+              "fieldName": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "kb-upload"
+        }
+      },
+      "name": "PDF Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        192
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "file",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        192
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "document_name",
+              "type": "string",
+              "value": "={{ $('PDF Upload Form').item.json.document_name }}"
+            },
+            {
+              "id": "p2",
+              "name": "document_type",
+              "type": "string",
+              "value": "PDF"
+            },
+            {
+              "id": "p3",
+              "name": "category",
+              "type": "string",
+              "value": "={{ $('PDF Upload Form').item.json.category || 'Uncategorized' }}"
+            },
+            {
+              "id": "p4",
+              "name": "product",
+              "type": "string",
+              "value": "={{ $('PDF Upload Form').item.json.product || 'N/A' }}"
+            },
+            {
+              "id": "p5",
+              "name": "version",
+              "type": "string",
+              "value": "={{ $('PDF Upload Form').item.json.version || '1.0' }}"
+            },
+            {
+              "id": "p6",
+              "name": "source",
+              "type": "string",
+              "value": "form_upload"
+            },
+            {
+              "id": "p7",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "p8",
+              "name": "client_id",
+              "type": "string",
+              "value": "={{ $('PDF Upload Form').item.json.client_id || 'default_client' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build Ingest Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        192
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_PATH",
+        "authentication": "headerAuth",
+        "options": {
+          "responseData": "Ingestion queued - processing in background."
+        }
+      },
       "name": "Document Upload Webhook",
       "type": "n8n-nodes-base.webhook",
-      "parameters": {"httpMethod": "POST", "path": "kb-ingest"}
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        384
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Webhook Header Auth"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
     },
     {
+      "parameters": {},
+      "name": "Bulk Upload Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        0
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "'YOUR_DRIVE_FOLDER_ID' in parents and mimeType='application/pdf' and trashed=false",
+        "returnAll": true,
+        "filter": {
+          "whatToSearch": "files"
+        },
+        "options": {}
+      },
+      "name": "List PDFs in Drive Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "name": "Extract PDF Text (Bulk)",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "document_name",
+              "type": "string",
+              "value": "={{ $('List PDFs in Drive Folder').item.json.name.replace(/\\.pdf$/i, '') }}"
+            },
+            {
+              "id": "b2",
+              "name": "document_type",
+              "type": "string",
+              "value": "PDF"
+            },
+            {
+              "id": "b3",
+              "name": "category",
+              "type": "string",
+              "value": "Uncategorized"
+            },
+            {
+              "id": "b4",
+              "name": "product",
+              "type": "string",
+              "value": "N/A"
+            },
+            {
+              "id": "b5",
+              "name": "version",
+              "type": "string",
+              "value": "1.0"
+            },
+            {
+              "id": "b6",
+              "name": "source",
+              "type": "string",
+              "value": "bulk_drive_upload"
+            },
+            {
+              "id": "b7",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "b8",
+              "name": "client_id",
+              "type": "string",
+              "value": "default_client"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build Bulk Ingest Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        0
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nreturn items.map(item => {\n  const b = item.json.body || item.json;\n  const raw = String(b.text || '');\n  const cleanText = raw.replace(/\\r\\n/g, '\\n').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return {\n    json: {\n      document_name: b.document_name || 'Untitled Document',\n      document_type: b.document_type || 'General',\n      category: b.category || 'Uncategorized',\n      product: b.product || 'N/A',\n      version: b.version || '1.0',\n      source: b.source || 'manual_upload',\n      client_id: b.client_id || 'default_client',\n      cleanText\n    }\n  };\n});\n"
+      },
       "name": "Clean & Normalize Text",
       "type": "n8n-nodes-base.code",
-      "notes": "Normalizes whitespace/line endings and reads document_name, document_type, category, product, version, source from the request body"
+      "typeVersion": 2,
+      "position": [
+        672,
+        192
+      ]
     },
     {
-      "name": "Check If Already Ingested",
-      "type": "n8n-nodes-base.postgres",
-      "notes": "Requires a Postgres credential pointing at your Supabase/Postgres instance",
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT count(*)::int as cnt FROM documents WHERE metadata->>'document_name' = $1 AND metadata->>'version' = $2"
+        "query": "SELECT count(*)::int as cnt FROM documents WHERE metadata->>'document_name' = $1 AND metadata->>'version' = $2 AND metadata->>'client_id' = $3",
+        "options": {
+          "queryReplacement": "={{ $json.document_name }},{{ $json.version }},{{ $json.client_id }}"
+        }
+      },
+      "name": "Check If Already Ingested",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        896,
+        192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
       }
     },
-    {"name": "Already Ingested?", "type": "n8n-nodes-base.if"},
     {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.cnt }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Already Ingested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Skipped duplicate ingestion: {{ $('Clean & Normalize Text').item.json.document_name }} v{{ $('Clean & Normalize Text').item.json.version }} already exists in the knowledge base.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
       "name": "Notify Skipped Duplicate",
       "type": "n8n-nodes-base.telegram",
-      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+      "typeVersion": 1.2,
+      "position": [
+        1408,
+        48
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram notifications bot"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
     },
     {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
       "name": "Insert into Knowledge Base",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
-      "notes": "Requires a Supabase credential (project URL + service role key) and a pgvector-enabled 'documents' table with a match_documents query function",
-      "parameters": {"mode": "insert", "tableName": "YOUR_SUPABASE_TABLE"}
+      "typeVersion": 1.3,
+      "position": [
+        1344,
+        336
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
     },
-    {"name": "Gemini Embeddings (Ingest)", "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini", "notes": "Requires a Google Gemini API credential"},
-    {"name": "KB Data Loader", "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader", "notes": "Attaches document_name/type/category/product/version/source as vector store metadata"},
-    {"name": "Notify Ingestion Success", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
-    {"name": "Ask Question Webhook", "type": "n8n-nodes-base.webhook", "parameters": {"httpMethod": "POST", "path": "kb-ask", "responseMode": "responseNode"}},
-    {"name": "Normalize Question", "type": "n8n-nodes-base.code", "notes": "Reads question and session_id from the request body"},
     {
-      "name": "Retrieve Top-K Chunks",
+      "parameters": {},
+      "name": "Gemini Embeddings (Ingest)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        560
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $('Clean & Normalize Text').item.json.cleanText }}",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "document_name",
+                "value": "={{ $('Clean & Normalize Text').item.json.document_name }}"
+              },
+              {
+                "name": "document_type",
+                "value": "={{ $('Clean & Normalize Text').item.json.document_type }}"
+              },
+              {
+                "name": "category",
+                "value": "={{ $('Clean & Normalize Text').item.json.category }}"
+              },
+              {
+                "name": "product",
+                "value": "={{ $('Clean & Normalize Text').item.json.product }}"
+              },
+              {
+                "name": "version",
+                "value": "={{ $('Clean & Normalize Text').item.json.version }}"
+              },
+              {
+                "name": "source",
+                "value": "={{ $('Clean & Normalize Text').item.json.source }}"
+              },
+              {
+                "name": "client_id",
+                "value": "={{ $('Clean & Normalize Text').item.json.client_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "KB Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1488,
+        560
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn [{ json: { chunksInserted: items.length } }];"
+      },
+      "name": "Summarize Ingestion Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Ingested: {{ $('Clean & Normalize Text').item.json.document_name }} v{{ $('Clean & Normalize Text').item.json.version }} into the knowledge base ({{ $json.chunksInserted }} chunks).",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notify Ingestion Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1920,
+        336
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram notifications bot"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Question Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -448,
+        928
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram RAG bot"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => {\n  const msg = item.json.message || {};\n  const chatId = msg.chat && msg.chat.id;\n  return {\n    json: {\n      question: String(msg.text || '').trim(),\n      chatId: chatId,\n      sessionId: 'telegram_' + chatId,\n      clientId: 'default_client'\n    }\n  };\n});"
+      },
+      "name": "Normalize Telegram Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "tableName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "documents"
+        },
+        "prompt": "={{ $json.question }}",
+        "topK": 5,
+        "options": {
+          "queryName": "match_documents",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "client_id",
+                "value": "={{ $json.clientId }}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Retrieve Top-K Chunks (TG)",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
-      "parameters": {"mode": "load", "tableName": "YOUR_SUPABASE_TABLE", "topK": 5}
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        928
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
     },
-    {"name": "Gemini Embeddings (Query)", "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini"},
-    {"name": "Assess Retrieval Sufficiency", "type": "n8n-nodes-base.code", "notes": "Flags sufficient=true when at least 1 chunk was retrieved and combined context is 80+ characters"},
-    {"name": "Sufficient Context?", "type": "n8n-nodes-base.if"},
     {
-      "name": "Grounded Answer Agent",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "notes": "System prompt instructs the agent to answer ONLY from the retrieved context and never use outside knowledge"
+      "parameters": {},
+      "name": "Gemini Embeddings (Query TG)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        80,
+        1152
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
     },
-    {"name": "Gemini Answer Model", "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini"},
-    {"name": "Session Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow", "parameters": {"sessionIdType": "customKey", "contextWindowLength": 6}},
-    {"name": "Format Success Response", "type": "n8n-nodes-base.code"},
-    {"name": "Respond With Answer", "type": "n8n-nodes-base.respondToWebhook"},
-    {"name": "Build Fallback Answer", "type": "n8n-nodes-base.code", "notes": "Returns a polite 'not in the knowledge base yet' message and flags escalated=true"},
-    {"name": "Notify No-Answer Escalation", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
-    {"name": "Respond With Fallback", "type": "n8n-nodes-base.respondToWebhook"}
+    {
+      "parameters": {
+        "jsCode": "const docs = $input.all();\nconst minDocs = 1;\nconst minTotalChars = 80;\nlet context = '';\nconst sources = [];\nfor (const d of docs) {\n  const doc = d.json.document || d.json;\n  const text = doc.pageContent || doc.text || '';\n  context += text + '\\n\\n';\n  const meta = doc.metadata || {};\n  if (meta.document_name) sources.push(meta.document_name);\n}\nconst sufficient = docs.length >= minDocs && context.trim().length >= minTotalChars;\nreturn [{\n  json: {\n    question: $('Normalize Telegram Question').item.json.question,\n    sessionId: $('Normalize Telegram Question').item.json.sessionId,\n    chatId: $('Normalize Telegram Question').item.json.chatId,\n    context: context.trim(),\n    sources: [...new Set(sources)],\n    sufficient\n  }\n}];"
+      },
+      "name": "Assess Retrieval Sufficiency (TG)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.sufficient }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Sufficient Context? (TG)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        576,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.question }}",
+        "options": {
+          "systemMessage": "=You are a company knowledge-base support assistant answering inside a Telegram chat. Answer the user's question using ONLY the context below. Do not use outside knowledge and never invent details. If the context does not contain the answer, say clearly that the information is not available in the knowledge base and offer to connect the user with a human team member.\n\nWrite your reply as PLAIN TEXT ONLY, suitable for a Telegram message. Do NOT use markdown formatting: no **bold**, no bullet points with * or -, no backtick code blocks, no headers. Use plain sentences and, if listing items, use simple numbered lines like \"1. ...\" instead.\n\nContext:\n{{ $json.context }}"
+        }
+      },
+      "name": "Grounded Answer Agent (TG)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        800,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "name": "Gemini Answer Model (TG)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        816,
+        896
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId }}",
+        "contextWindowLength": 6
+      },
+      "name": "Session Memory (TG)",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        944,
+        896
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = $input.first().json;\nconst upstream = $('Assess Retrieval Sufficiency (TG)').first().json;\nconst answer = out.output || String(out);\nreturn [{ json: { chatId: upstream.chatId, text: answer } }];"
+      },
+      "name": "Format Telegram Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Telegram Answer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1376,
+        768
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram RAG bot"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstream = $('Assess Retrieval Sufficiency (TG)').first().json;\nreturn [{\n  json: {\n    chatId: upstream.chatId,\n    text: \"I don't have that information in the knowledge base yet - I'll connect you with a team member who can help.\"\n  }\n}];"
+      },
+      "name": "Build Telegram Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Telegram Fallback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        1072
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram RAG bot"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    }
   ],
   "connections": {
-    "Document Upload Webhook": {"main": [[{"node": "Clean & Normalize Text"}]]},
-    "Clean & Normalize Text": {"main": [[{"node": "Check If Already Ingested"}]]},
-    "Check If Already Ingested": {"main": [[{"node": "Already Ingested?"}]]},
-    "Already Ingested?": {"main": [[{"node": "Notify Skipped Duplicate"}], [{"node": "Insert into Knowledge Base"}]]},
-    "Insert into Knowledge Base": {"main": [[{"node": "Notify Ingestion Success"}]]},
-    "Ask Question Webhook": {"main": [[{"node": "Normalize Question"}]]},
-    "Normalize Question": {"main": [[{"node": "Retrieve Top-K Chunks"}]]},
-    "Retrieve Top-K Chunks": {"main": [[{"node": "Assess Retrieval Sufficiency"}]]},
-    "Assess Retrieval Sufficiency": {"main": [[{"node": "Sufficient Context?"}]]},
-    "Sufficient Context?": {"main": [[{"node": "Grounded Answer Agent"}], [{"node": "Build Fallback Answer"}]]},
-    "Grounded Answer Agent": {"main": [[{"node": "Format Success Response"}]]},
-    "Format Success Response": {"main": [[{"node": "Respond With Answer"}]]},
-    "Build Fallback Answer": {"main": [[{"node": "Notify No-Answer Escalation"}]]},
-    "Notify No-Answer Escalation": {"main": [[{"node": "Respond With Fallback"}]]}
+    "Clean & Normalize Text": {
+      "main": [
+        [
+          {
+            "node": "Check If Already Ingested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Already Ingested": {
+      "main": [
+        [
+          {
+            "node": "Already Ingested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Build Ingest Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ingest Payload": {
+      "main": [
+        [
+          {
+            "node": "Clean & Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Clean & Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bulk Upload Trigger": {
+      "main": [
+        [
+          {
+            "node": "List PDFs in Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List PDFs in Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text (Bulk)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text (Bulk)": {
+      "main": [
+        [
+          {
+            "node": "Build Bulk Ingest Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Bulk Ingest Payload": {
+      "main": [
+        [
+          {
+            "node": "Clean & Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Summarize Ingestion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Ingestion Result": {
+      "main": [
+        [
+          {
+            "node": "Notify Ingestion Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Question Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Telegram Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Telegram Question": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Top-K Chunks (TG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Top-K Chunks (TG)": {
+      "main": [
+        [
+          {
+            "node": "Assess Retrieval Sufficiency (TG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Retrieval Sufficiency (TG)": {
+      "main": [
+        [
+          {
+            "node": "Sufficient Context? (TG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grounded Answer Agent (TG)": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram Answer": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Fallback": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings (Ingest)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Insert into Knowledge Base",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Insert into Knowledge Base",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embeddings (Query TG)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Retrieve Top-K Chunks (TG)",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Answer Model (TG)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Grounded Answer Agent (TG)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Memory (TG)": {
+      "ai_memory": [
+        [
+          {
+            "node": "Grounded Answer Agent (TG)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Ingested?": {
+      "main": [
+        [
+          {
+            "node": "Notify Skipped Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert into Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sufficient Context? (TG)": {
+      "main": [
+        [
+          {
+            "node": "Grounded Answer Agent (TG)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Telegram Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
   },
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "Supabase (pgvector)", "Postgres", "Google Gemini", "Telegram"],
-    "setup_notes": "Requires: a Postgres/Supabase credential, a Supabase project with pgvector enabled and a 'documents' table + match_documents query function, a Google Gemini API credential, and a Telegram bot credential. Replace all YOUR_* placeholders before use."
+    "note": "Sanitized export. Replace every YOUR_* placeholder and re-select credentials after import. Requires a pgvector-enabled 'documents' table and match_documents function in Supabase."
   }
 }

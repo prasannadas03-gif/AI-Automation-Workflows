@@ -1,180 +1,1201 @@
 {
-  "name": "RINDAX CRM Agent — Outreach & Response Tracker",
-  "description": "Fully autonomous CRM agent powered by Claude Sonnet 4.6. Fetches leads from Airtable, writes personalized outreach emails, sends via Gmail, tracks replies, and updates lead status automatically. Two agents run in parallel: Outreach Agent (9 AM daily) and Response Tracker (every 4 hours).",
-  "agents": [
-    {
-      "name": "CRM Outreach Agent",
-      "trigger": "Schedule — 9 AM daily",
-      "model": "Claude Sonnet 4.6 (Anthropic)",
-      "description": "Fetches New and Follow-Up Due leads from Airtable, extracts emails from mixed Contact Info field, deduplicates, then loops — sending a personalized Gmail and updating Airtable status to Contacted."
-    },
-    {
-      "name": "CRM Response Tracker Agent",
-      "trigger": "Schedule — every 4 hours",
-      "model": "Claude Sonnet 4.6 (Anthropic)",
-      "description": "Checks Gmail inbox for unread emails, matches senders against Contacted leads in Airtable, classifies intent (Replied / Meeting Booked / Not Interested), and updates Airtable automatically."
-    }
-  ],
+  "name": "CRM AI Agent — Outreach & Follow-Up",
   "nodes": [
     {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
       "name": "Outreach Schedule (9 AM Daily)",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "parameters": {"rule": {"interval": [{"triggerAtHour": 9}]}}
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        176
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
     },
     {
-      "name": "Fetch Leads from Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "notes": "Fetches leads with Status = New, Follow Up Due, or Replied",
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are RINDAX CRM Outreach Agent — smart, autonomous outreach specialist for RINDAX AI automation agency, Guwahati, India.\n\nLEAD DATA:\n- Record ID: {{ $json.id }}\n- Company: {{ $json['Company'] || $json.fields?.['Company Name'] }}\n- Contact: {{ $json['Decision Maker'] || $json.fields?.['Decision Maker'] }}\n- Email: {{ $json.extractedEmail }}\n- Industry: {{ $json['Industry'] || $json.fields?.['Industry'] }}\n- Location: {{ $json.fields?.['Location'] || '' }}\n- Business Size: {{ $json.fields?.['Business Size'] || '' }}\n- Temperature: {{ $json.fields?.['Temperature'] || '' }}\n- Pain Point: {{ $json.fields?.['Pain Point Identified'] || '' }}\n- Pain Signals: {{ $json.fields?.['Pain Signals'] || '' }}\n- Recommended Service: {{ $json.fields?.['Recommended Service'] || '' }}\n- Notes: {{ $json.fields?.['Notes'] || '' }}\n- Today: {{ $json.todayDate }}\n- Follow Up Date: {{ $json.followUpDate }}\n\nRESEARCH:\n- Website: {{ $json.research?.websiteContent || 'None' }}\n- Google Search: {{ $json.research?.googleSearch || 'None' }}\n- Maps: {{ $json.research?.googleMaps || 'None' }}\n- Reviews: {{ $json.research?.customerReviews || 'None' }}\n\nDECISION PROCESS:\n1. Assess lead quality from research. If confidence below 6 or dormant — skip, update Airtable status to Not Interested with reason.\n2. ESCALATE TO TELEGRAM IMMEDIATELY if lead involves: pricing question, meeting/call request, technical question, negotiation. Format:\n🚨 *RINDAX — Your Input Required*\n*Lead:* [Company] | *Contact:* [Name] | [Email]\n*Situation:* [specific detail]\n*Why:* [Pricing/Meeting/Technical]\n*Suggested next step:* [your recommendation]\n3. Otherwise SEND EMAIL autonomously.\n\nEMAIL RULES:\n- Never: \"I hope this email finds you well\", leverage/streamline/cutting-edge/game-changer\n- No bullet points in body\n- Sign off: Cheers, Prasanna | RINDAX\n- Reference something REAL from research\n- Max 5 lines, end with one simple question\n\nSERVICES: WhatsApp Automation, AI Chatbot, Booking Automation, Lead Capture, Invoice/Payment Reminder (PayRemind), Instagram DM Automation, Workflow Automation, CRM Setup, Custom AI Agent\n\nAFTER SENDING: Update Airtable — Status: Contacted, dates, pain point identified, notes on email angle used.\n\nRULES: Escalate FIRST before any action. Handle everything else autonomously. Use exact dates provided.",
+        "options": {
+          "systemMessage": "You are a smart, experienced outreach specialist for RINDAX. You think critically before acting, write like a real human founder, and make autonomous decisions confidently. You escalate to Prasanna via Telegram ONLY when pricing, meeting scheduling, or human judgment is required — everything else you handle yourself without asking. Your emails are specific, warm, and genuine — never templated or salesy. Always update Airtable after every action.",
+          "maxIterations": 15
+        }
+      },
+      "name": "CRM Outreach Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2848,
+        224
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "cachedResultName": "Claude Haiku 4.5",
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001"
+        },
+        "options": {
+          "maxTokensToSample": 1500
+        }
+      },
+      "name": "Claude Haiku (Outreach)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        2784,
+        512
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
       "parameters": {
         "operation": "search",
-        "base": "YOUR_AIRTABLE_BASE_ID",
-        "table": "YOUR_AIRTABLE_TABLE_ID",
-        "filterByFormula": "OR({Status} = 'New', {Status} = 'Follow Up Due', {Status} = 'Replied')"
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "filterByFormula": "OR(Status = 'New', Status = 'Follow Up Due')",
+        "options": {}
+      },
+      "name": "Fetch Leads from Airtable",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [
+        3040,
+        512
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
       }
     },
     {
-      "name": "Extract Email from Contact Info",
-      "type": "n8n-nodes-base.code",
-      "notes": "Regex extracts email from mixed Contact Info field (may contain phone, LinkedIn URL, and email together)",
-      "parameters": {
-        "jsCode": "const contactInfo = $input.item.json['Contact Info'] || '';\nconst emailMatch = contactInfo.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);\nconst extractedEmail = emailMatch ? emailMatch[0].toLowerCase().trim() : '';\nconst today = new Date();\nconst todayISO = today.toISOString().split('T')[0];\nconst followUp = new Date(today);\nfollowUp.setDate(followUp.getDate() + 3);\nreturn { json: { ...$input.item.json, extractedEmail, todayDate: todayISO, followUpDate: followUp.toISOString().split('T')[0] } };"
-      }
-    },
-    {
-      "name": "Filter: Has Email?",
-      "type": "n8n-nodes-base.filter",
-      "notes": "Passes only leads where an email was successfully extracted"
-    },
-    {
-      "name": "Remove Duplicate Emails",
-      "type": "n8n-nodes-base.removeDuplicates",
-      "notes": "Deduplicates leads by extracted email address to avoid sending duplicate emails",
-      "parameters": {"compare": "selectedFields", "fieldsToCompare": "extractedEmail"}
-    },
-    {
-      "name": "No Email — Auto Close Lead",
-      "type": "n8n-nodes-base.airtable",
-      "notes": "Auto-closes leads with no email found in Contact Info",
       "parameters": {
         "operation": "update",
-        "base": "YOUR_AIRTABLE_BASE_ID",
-        "table": "YOUR_AIRTABLE_TABLE_ID",
-        "columns": {"value": {"Status": "Closed", "Notes": "Auto-closed: No email address found in Contact Info"}}
-      }
-    },
-    {
-      "name": "Loop Over Leads",
-      "type": "n8n-nodes-base.splitInBatches",
-      "notes": "Processes one lead at a time"
-    },
-    {
-      "name": "CRM Outreach Agent (Claude)",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "notes": "Claude Sonnet AI Agent — reads lead data, writes personalized email, sends via Gmail, updates Airtable",
-      "parameters": {
-        "model": "Claude Sonnet 4.6",
-        "credentials": "YOUR_ANTHROPIC_API_KEY",
-        "systemMessage": "You are a diligent CRM automation agent for RINDAX, an AI automation agency. Always process ALL leads returned. Never skip a lead. Write personalized outreach emails based on the company name, industry, and recommended service. After sending an email, always update Airtable immediately before moving to the next lead.",
-        "maxIterations": 30,
-        "tools": ["Send Email via Gmail", "Update Lead Status in Airtable"]
-      }
-    },
-    {
-      "name": "Send Email via Gmail",
-      "type": "n8n-nodes-base.gmailTool",
-      "notes": "AI-controlled Gmail tool. Claude decides recipient, subject, and body.",
-      "parameters": {
-        "senderName": "Prasanna | RINDAX",
-        "credentials": "YOUR_GMAIL_OAUTH_CREDENTIALS"
-      }
-    },
-    {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Last Contacted",
+              "id": "Last Contacted",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Follow Up Date",
+              "id": "Follow Up Date",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Notes",
+              "id": "Notes",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Pain Point Identified",
+              "id": "YOUR_FIELD_ID",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Follow Up Date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('follow_up_date', 'Use the exact followUpDate provided in the prompt. Format: YYYY-MM-DD') }}",
+            "Last Contacted": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('last_contacted', 'Use the exact todayDate provided in the prompt. Format: YYYY-MM-DD') }}",
+            "Notes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('notes', 'Brief note about what action was taken') }}",
+            "Pain Point Identified": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('pain_point', 'The specific pain point identified for this business from research') }}",
+            "Status": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('status', 'One of: Contacted, Follow Up Due, Replied, Meeting Booked, Closed, Not Interested') }}",
+            "id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('record_id', 'Airtable record ID to update, starts with rec') }}"
+          }
+        },
+        "options": {}
+      },
       "name": "Update Lead Status in Airtable",
       "type": "n8n-nodes-base.airtableTool",
-      "notes": "AI-controlled Airtable tool. Updates Status, Last Contacted, Follow Up Date, Notes.",
-      "parameters": {
-        "base": "YOUR_AIRTABLE_BASE_ID",
-        "table": "YOUR_AIRTABLE_TABLE_ID",
-        "credentials": "YOUR_AIRTABLE_API_KEY"
+      "typeVersion": 2.2,
+      "position": [
+        3168,
+        512
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
       }
     },
     {
-      "name": "Response Tracker Schedule (Every 4 Hours)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 4}]}}
-    },
-    {
-      "name": "CRM Response Tracker Agent (Claude)",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "notes": "Claude Sonnet AI Agent — checks Gmail inbox, matches replies to Airtable leads, classifies intent, updates status",
       "parameters": {
-        "model": "Claude Sonnet 4.6",
-        "credentials": "YOUR_ANTHROPIC_API_KEY",
-        "systemMessage": "You are a precise CRM tracking agent. Check Gmail inbox for unread emails. Match each email sender to a lead in Airtable by email address. Classify the reply intent: Replied, Meeting Booked, Not Interested, or Needs More Info. Always update Airtable after every classification.",
-        "maxIterations": 30,
-        "tools": ["Check Gmail Inbox for Replies", "Fetch Contacted Leads from Airtable", "Update Lead Reply Status in Airtable"]
-      }
-    },
-    {
-      "name": "Check Gmail Inbox for Replies",
+        "sendTo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email', 'Recipient email address') }}",
+        "subject": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('subject', 'Email subject line') }}",
+        "message": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('body', 'HTML email body content') }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Prasanna | RINDAX"
+        }
+      },
+      "name": "Send Email to Lead",
       "type": "n8n-nodes-base.gmailTool",
-      "notes": "Fetches all unread emails from inbox (excluding sent)",
+      "typeVersion": 2.2,
+      "position": [
+        3296,
+        512
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "name": "Response Check Schedule (Every 4 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        480
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are the RINDAX CRM Response Tracker Agent — a smart assistant that reads lead replies and decides the best next action like an experienced BD professional would.\n\nYour job:\n\n1. Use 'Fetch Contacted Leads' to get all leads with Status = 'Contacted' OR 'Follow Up Due' from Airtable.\n\n2. For each lead, extract their email from Contact Info field (look for @ symbol).\n\n3. Search Gmail for replies: use 'Check Inbox for Replies' with query 'from:EMAIL_ADDRESS after:DATE' where DATE is today minus 2 days in YYYY/MM/DD format.\n\n4. CRITICALLY ANALYZE each reply — don't just classify mechanically. Read the actual message and understand what the person really means:\n\n   POSITIVE signals: interested, want to know more, asked a question about the service, said yes, said let's talk\n   NEGATIVE signals: not interested, wrong person, asked to be removed, said they already have a solution\n   MEETING/CALL request: any mention of call, meeting, schedule, Zoom, Google Meet, talk, connect\n   PRICING question: any mention of cost, price, how much, fees, budget, charges\n   TECHNICAL question: specific questions about how it works, integrations, what tools, implementation\n   AMBIGUOUS: unclear intent, one-word reply, emoji-only — treat as positive and respond warmly\n\n5. DECIDE AND ACT:\n\n   A) ESCALATE TO PRASANNA via Telegram IMMEDIATELY if reply contains:\n      - Pricing question\n      - Meeting/call request\n      - Technical question requiring human judgment\n      - Positive reply where next step needs Prasanna personally\n\n      Telegram escalation format:\n      🚨 *RINDAX — Your Input Required*\n\n      *Lead:* [Company Name]\n      *Contact:* [Name] | [Email]\n      *Their reply:* [Quote the actual reply]\n      *Why I need you:* [Pricing / Meeting Request / Technical Question]\n      *Suggested response:* [What you think Prasanna should say]\n\n      Then update Airtable: Status = 'Replied', Notes = 'Escalated to Prasanna — [reason]'\n\n   B) HANDLE AUTONOMOUSLY if reply is:\n      - Positive but just needs a warm follow-up — send a natural reply, keep conversation going\n      - Ambiguous — send a warm, short reply acknowledging them and opening the door\n      - Needs more info (generic) — send a brief, specific reply about what RINDAX does for their industry\n\n      When writing autonomous replies:\n      - Sound like Prasanna, not a bot\n      - Reference their specific industry and pain point\n      - Keep it under 4 lines\n      - Never use formal language or marketing speak\n      - End with a simple question or soft next step\n\n   C) UPDATE AIRTABLE status for no-reply leads:\n      - If Follow Up Date is today or past → Status = 'Follow Up Due', increment Follow Up Count by 1\n      - If Follow Up Count >= 3 → Status = 'Not Interested', Notes = 'Auto-closed: No response after 3 follow-ups'\n      - If Follow Up Date is in the future → skip, do not update\n\n6. Process ALL leads. Never skip without checking.\n\nIMPORTANT: Escalate to Prasanna FIRST before taking any other action on that lead. For all other leads — handle completely on your own without hesitation.",
+        "options": {
+          "systemMessage": "You are a smart CRM response agent for RINDAX. You read replies carefully and make intelligent decisions like an experienced BD professional. You escalate to Prasanna only for pricing, meeting scheduling, or decisions requiring human judgment. Everything else you handle autonomously with confident, human-sounding responses. Always update Airtable after every action.",
+          "maxIterations": 15
+        }
+      },
+      "name": "CRM Response Tracker Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        240,
+        480
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "cachedResultName": "Claude Haiku 4.5",
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001"
+        },
+        "options": {
+          "maxTokensToSample": 1500
+        }
+      },
+      "name": "Claude Haiku (Tracker)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        48,
+        704
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
       "parameters": {
         "operation": "getAll",
-        "filters": {"q": "in:inbox -from:me", "readStatus": "unread"},
-        "credentials": "YOUR_GMAIL_OAUTH_CREDENTIALS"
+        "filters": {
+          "q": "in:inbox"
+        }
+      },
+      "name": "Check Inbox for Replies",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        704
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
       }
     },
     {
-      "name": "Fetch Contacted Leads from Airtable",
-      "type": "n8n-nodes-base.airtableTool",
-      "notes": "Fetches all leads with Status = Contacted for reply matching",
       "parameters": {
         "operation": "search",
-        "base": "YOUR_AIRTABLE_BASE_ID",
-        "table": "YOUR_AIRTABLE_TABLE_ID",
-        "filterByFormula": "{Status} = 'Contacted'",
-        "credentials": "YOUR_AIRTABLE_API_KEY"
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "filterByFormula": "OR(Status = 'Contacted', Status = 'Follow Up Due')",
+        "options": {}
+      },
+      "name": "Fetch Contacted Leads",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [
+        432,
+        704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
       }
     },
     {
-      "name": "Update Lead Reply Status in Airtable",
-      "type": "n8n-nodes-base.airtableTool",
-      "notes": "Updates lead with reply classification: Replied / Meeting Booked / Not Interested / Contacted",
       "parameters": {
-        "base": "YOUR_AIRTABLE_BASE_ID",
-        "table": "YOUR_AIRTABLE_TABLE_ID",
-        "credentials": "YOUR_AIRTABLE_API_KEY"
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Follow Up Date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('follow_up_date', 'Next follow-up date, ISO format YYYY-MM-DD') }}",
+            "Notes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('notes', 'Updated notes and next action') }}",
+            "Response Summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('response_summary', 'Brief summary of what the lead replied or current situation') }}",
+            "Status": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('status', 'Replied, Meeting Booked, Closed, Not Interested, Follow Up Due, or Contacted') }}",
+            "YOUR_FIELD_ID": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('follow_up_count', 'Increment the follow up count by 1 each time a follow-up is sent') }}",
+            "id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('record_id', 'Airtable record ID to update') }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Replied",
+                  "value": "Replied"
+                },
+                {
+                  "name": "Meeting Booked",
+                  "value": "Meeting Booked"
+                },
+                {
+                  "name": "Closed",
+                  "value": "Closed"
+                },
+                {
+                  "name": "Not Interested",
+                  "value": "Not Interested"
+                },
+                {
+                  "name": "Follow Up Due",
+                  "value": "Follow Up Due"
+                }
+              ],
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "options"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Notes",
+              "id": "Notes",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Response Summary",
+              "id": "Response Summary",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Follow Up Date",
+              "id": "Follow Up Date",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "dateTime"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Follow Up Count",
+              "id": "YOUR_FIELD_ID",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "number"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Update Lead Response in Airtable",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        704
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
       }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "filterByFormula": "OR({Status} = 'New', {Status} = 'Follow Up Due', {Status} = 'Replied')",
+        "options": {}
+      },
+      "name": "Fetch Leads from Airtable (Main)",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        176
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract email from mixed Contact Info field\nconst contactInfo = $input.item.json.fields?.['Contact Info'] || $input.item.json['Contact Info'] || '';\n\nconst emailMatch = contactInfo.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);\nconst extractedEmail = emailMatch ? emailMatch[0].toLowerCase().trim() : '';\n\n// Get today's correct date\nconst today = new Date();\nconst todayISO = today.toISOString().split('T')[0]; // e.g. 2026-08-06\n\n// Follow up = 3 days from today\nconst followUp = new Date(today);\nfollowUp.setDate(followUp.getDate() + 3);\nconst followUpISO = followUp.toISOString().split('T')[0]; // e.g. 2026-08-09\n\nreturn {\n  json: {\n    ...$input.item.json,\n    extractedEmail: extractedEmail,\n    hasEmail: extractedEmail !== '',\n    contactRaw: contactInfo,\n    todayDate: todayISO,\n    followUpDate: followUpISO\n  }\n};"
+      },
+      "name": "Extract Email from Contact Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.extractedEmail }}",
+              "operator": {
+                "operation": "notEmpty",
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        992,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Loop Over Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2560,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {},
+      "name": "All Leads Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        -16
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "cachedResultName": "CRM base"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "cachedResultName": "Leads"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "id",
+              "id": "id",
+              "readOnly": true,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Notes",
+              "id": "Notes",
+              "readOnly": false,
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Notes": "Auto-closed: No email address found in Contact Info",
+            "Status": "Closed",
+            "id": "={{ $json.id }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "No Email — Mark Closed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1216,
+        224
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "extractedEmail",
+        "options": {}
+      },
+      "name": "Remove Duplicates",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.fields['Website URL'] || $json['Website URL'] }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "name": "Scrape Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1664,
+        128
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "YOUR_SERPER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q: ($json.fields?.['Company Name'] || $json.fields?.Company || $json.Company || '') + ' ' + ($json.fields?.Industry || $json.Industry || ''), gl: 'in', hl: 'en', num: 10 }) }}",
+        "options": {}
+      },
+      "name": "Google Search Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1888,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/maps",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "YOUR_SERPER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q: ($json.fields?.['Company Name'] || $json.fields?.Company || $json.Company || ''), gl: 'in', hl: 'en' }) }}",
+        "options": {}
+      },
+      "name": "Google Maps Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2112,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Get lead base data — handle both flat and nested fields structure\nconst fields = $input.item.json.fields || $input.item.json;\nconst lead = $input.item.json;\n\n// Website content from Scrape Website node\nlet websiteText = 'No website available';\ntry {\n  const websiteRaw = $('Scrape Website').item?.json?.data || $('Scrape Website').item?.json?.body || '';\n  if (typeof websiteRaw === 'string' && websiteRaw.length > 0) {\n    websiteText = websiteRaw.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim().substring(0, 2000);\n  }\n} catch(e) { websiteText = 'Website scrape failed'; }\n\n// Google Search results\nlet searchSnippets = 'No search results';\ntry {\n  const searchResults = $('Google Search Lead').item?.json?.organic_results || [];\n  if (searchResults.length > 0) {\n    searchSnippets = searchResults.slice(0, 3).map(r => r.snippet || '').filter(Boolean).join(' | ');\n  }\n} catch(e) { searchSnippets = 'Search failed'; }\n\n// Google Maps data\nlet mapsInfo = 'No Maps data';\nlet mapsReviews = 'No reviews found';\ntry {\n  const mapsResults = $('Google Maps Lead').item?.json?.local_results || [];\n  if (mapsResults.length > 0) {\n    const mapsData = mapsResults[0];\n    mapsInfo = `Rating: ${mapsData.rating || 'N/A'}, Reviews: ${mapsData.reviews || 'N/A'}, Category: ${mapsData.type || 'N/A'}, Address: ${mapsData.address || 'N/A'}`;\n    const reviewSnippets = (mapsData.reviews_from_snippet || []).slice(0, 3).map(r => r.snippet || '').filter(Boolean);\n    if (reviewSnippets.length > 0) mapsReviews = reviewSnippets.join(' | ');\n  }\n} catch(e) { mapsInfo = 'Maps search failed'; }\n\nreturn {\n  json: {\n    ...lead,\n    'Website URL': fields['Website URL'] || '',\n    research: {\n      websiteContent: websiteText,\n      googleSearch: searchSnippets,\n      googleMaps: mapsInfo,\n      customerReviews: mapsReviews\n    }\n  }\n};"
+      },
+      "name": "Compile Research",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "website-check",
+              "leftValue": "={{ $json.fields['Website URL'] || $json['Website URL'] }}",
+              "operator": {
+                "operation": "notEmpty",
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "name": "Has Website?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Skip Website Scrape",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1664,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('message', 'Full Telegram notification message in Markdown format') }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Notify on Telegram",
+      "type": "n8n-nodes-base.telegramTool",
+      "typeVersion": 1.2,
+      "position": [
+        3456,
+        480
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        2912,
+        512
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {},
+      "name": "Simple Memory1",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        176,
+        704
+      ]
     }
   ],
-  "airtable_schema": {
-    "fields": ["Company", "Industry", "Decision Maker", "Contact Info", "Why Fit", "Recommended Service", "Outreach Subject", "Outreach Message", "Status", "Date Added", "Last Contacted", "Follow Up Date", "Notes", "Response Summary", "Temperature", "Confidence"],
-    "status_values": ["New", "Contacted", "Replied", "Meeting Booked", "Closed", "Not Interested", "Follow Up Due"]
-  },
   "connections": {
-    "Outreach Schedule (9 AM Daily)": {"main": [[{"node": "Fetch Leads from Airtable"}]]},
-    "Fetch Leads from Airtable": {"main": [[{"node": "Extract Email from Contact Info"}]]},
-    "Extract Email from Contact Info": {"main": [[{"node": "Filter: Has Email?"}]]},
-    "Filter: Has Email?": {
-      "main": [
-        [{"node": "Remove Duplicate Emails"}],
-        [{"node": "No Email — Auto Close Lead"}]
+    "Claude Haiku (Outreach)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Remove Duplicate Emails": {"main": [[{"node": "Loop Over Leads"}]]},
+    "Fetch Leads from Airtable": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Status in Airtable": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email to Lead": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Check Schedule (Every 4 Hours)": {
+      "main": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Haiku (Tracker)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Inbox for Replies": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contacted Leads": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Response in Airtable": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Schedule (9 AM Daily)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Leads from Airtable (Main)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Leads from Airtable (Main)": {
+      "main": [
+        [
+          {
+            "node": "Extract Email from Contact Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email from Contact Info": {
+      "main": [
+        [
+          {
+            "node": "Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Has Website?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Website": {
+      "main": [
+        [
+          {
+            "node": "Google Search Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Website Scrape": {
+      "main": [
+        [
+          {
+            "node": "Google Search Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Search Lead": {
+      "main": [
+        [
+          {
+            "node": "Google Maps Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Maps Lead": {
+      "main": [
+        [
+          {
+            "node": "Compile Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Research": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Outreach Agent": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify on Telegram": {
+      "ai_tool": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "CRM Response Tracker Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email?": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Email — Mark Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Loop Over Leads": {
       "main": [
-        [{"node": "Done"}],
-        [{"node": "CRM Outreach Agent (Claude)"}]
+        [
+          {
+            "node": "All Leads Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CRM Outreach Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "CRM Outreach Agent (Claude)": {"main": [[{"node": "Loop Over Leads"}]]},
-    "Response Tracker Schedule (Every 4 Hours)": {"main": [[{"node": "CRM Response Tracker Agent (Claude)"}]]}
+    "Has Website?": {
+      "main": [
+        [
+          {
+            "node": "Scrape Website",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Website Scrape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
   },
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "Claude Sonnet 4.6", "Anthropic API", "Airtable", "Gmail", "AI Agent Nodes"]
+    "note": "Sanitized export. Replace every YOUR_* placeholder and re-select credentials after import. Workflow is exported inactive."
   }
 }
