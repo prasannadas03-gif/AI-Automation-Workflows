@@ -2,9 +2,9 @@
 
 **Built by [Prasanna Kumar Das](https://rindax.com) | AI Automation & Data Analytics Professional | Assam, India**
 
-This repository showcases production-ready AI automation workflows built with **n8n**, **Claude AI**, **Google Gemini**, **Airtable**, **Gmail**, and **Telegram**. These are real workflows running live for content, lead generation, job search, and inbox automation.
+This repository documents AI automation workflows built with **n8n**, **Claude AI**, **Google Gemini**, **Airtable**, **Gmail**, and **Telegram**, covering content, lead generation, job search, and inbox automation.
 
-> ⚠️ Credentials have been replaced with placeholders for security. Replace `YOUR_*` values with your own before use.
+> ℹ️ **About the `.json` files:** each file is a simplified **workflow blueprint**: the nodes, the logic between them, the stack, and the design decisions. They are **not one-click n8n exports**, so importing one into n8n will not give you a working canvas. All credentials, IDs, and chat/page identifiers have been replaced with `YOUR_*` placeholders. Screenshots of the real canvases are in `assets/` and in each section below.
 
 ---
 
@@ -118,7 +118,7 @@ Schedule Trigger → Google Sheets (fetch pending post) → Claude AI (generate 
 
 Fully automated pipeline that monitors a blog RSS feed and instantly publishes new articles to all 3 social platforms — zero manual input required.
 
-**Stack:** n8n · RSS Feed Trigger · HTML Parser · Claude AI · LinkedIn · Facebook · Instagram
+**Stack:** n8n · RSS Feed Trigger · HTML Parser · Claude AI (via OpenRouter) · LinkedIn · Facebook · Instagram
 
 **Flow:**
 ```
@@ -268,14 +268,16 @@ Webhook → Route by tier → [Summary: Telegram notify] / [Reply: stage + Teleg
 
 Paired with separate Official-inbox and Personal-inbox classification workflows that feed this router.
 
+> 🔒 **Security note:** the router's webhook is documented as running without authentication. Any internet-exposed n8n webhook should be protected with a header-auth credential or an IP allowlist.
+
 ---
 
-## 🛠️ How to Use
+## 🛠️ How to Read These Blueprints
 
-1. Import the `.json` file into your n8n instance
-2. Replace all `YOUR_*` placeholder values with your real credentials — **use n8n's built-in credential manager for API keys and bot tokens rather than pasting them into node parameters**
-3. Set up required connections in n8n (Google Sheets, Gmail, Airtable, Telegram, Google Gemini, etc.)
-4. Activate the workflow
+1. Open a `.json` file to see each workflow's nodes, the notes explaining what each one does, and the `connections` map showing how data flows.
+2. Use the **Flow** diagram above each blueprint as the build order when recreating it in your own n8n instance.
+3. Create credentials with n8n's built-in credential manager (Airtable, Gmail, Google Gemini, Anthropic, Telegram, etc.). Never paste API keys or bot tokens into node parameters.
+4. Replace every `YOUR_*` placeholder with your own IDs (Airtable base/table, Telegram chat, Supabase table, and so on).
 
 ---
 
