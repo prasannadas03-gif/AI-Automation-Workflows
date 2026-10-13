@@ -1,66 +1,1050 @@
 {
-  "name": "Personal Email Workflow \u2192 Telegram",
-  "description": "Gmail inbox triage with an AI classifier that sorts every unread email into promotional / important / needs-reply, drafts a ready-to-send reply for anything needing one, and routes it to Telegram with inline Send/Reject buttons \u2014 a tap sends the Gmail reply (with signature) and marks the thread read, or rejects it with no email sent.",
+  "name": "Personal Email Workflow → Telegram",
   "nodes": [
-    {"name": "New Email Received", "type": "n8n-nodes-base.gmailTrigger", "notes": "Polls every minute for unread mail. Requires a Gmail OAuth2 credential", "parameters": {"filters": {"readStatus": "unread"}}},
-    {"name": "Throttle Before Classify", "type": "n8n-nodes-base.wait", "notes": "Short delay so the full email body is available before classification"},
     {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "1161b3c9-8a8c-4b32-80cd-5ac4789ac5cb",
+      "name": "New Email Received",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        192
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "e0145ac7-e610-45ea-ade1-45e50349db7b",
+      "name": "Throttle Before Classify",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Subject: {{ $json.subject }}\nFrom: {{ $json.from.text || $json.from.value?.[0]?.address || $json.from }}\nBody:\n{{ $json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are the AI email assistant for YOUR NAME, YOUR ROLE at YOUR COMPANY (YOUR_WEBSITE). You triage incoming emails and write professional, accurate, and ready-to-send draft replies strictly based on YOUR NAME's verified capabilities and professional background.\n\n### ABOUT YOU / YOUR BUSINESS (replace with your own details)\n- Title: YOUR TITLE\n- Location / availability: YOUR LOCATION\n- Contact: YOUR_EMAIL | YOUR_PHONE\n- Links: YOUR_PORTFOLIO | YOUR_WEBSITE | YOUR_LINKEDIN | YOUR_GITHUB\n- Experience: YOUR YEARS AND BACKGROUND\n- Certifications: YOUR CERTIFICATIONS\n- Key tools and tech stack: YOUR TOOLS\n\n### CORE SERVICES & CAPABILITIES (replace with your own)\n1. SERVICE ONE: short description.\n2. SERVICE TWO: short description.\n3. SERVICE THREE: short description.\n\n### CLASSIFICATION RULES\nClassify each incoming email into exactly one category. Output the category as a plain lowercase string with no extra words: \"promotional\", \"important\", or \"needs_reply\".\n\n- \"promotional\": ONLY pure advertising. Marketing newsletters, sale/discount/coupon offers, cold vendor sales pitches, sponsored content, upsell/upgrade pushes (e.g. \"Get 50% off\", \"Upgrade to Premium\", \"Limited time offer\"), and spam. These are silently marked as read with no Telegram alert.\n\n- \"important\": EVERYTHING else that is not advertising and does not need a reply. This includes, for example: job alerts and job recommendations, learning platform notifications (course deadlines, certificates, enrollment updates), payment receipts, failed payments, renewals, security/login alerts, account or policy notices, order/shipping/delivery updates, bank/UPI/transaction alerts, calendar invites, GitHub/Slack/Google Cloud/Workspace/SaaS activity and usage notifications, service status or outage notices, and any automated notification about an account, application, or activity of yours. You WANT a Telegram notification for all of these.\n\nIMPORTANT TIE-BREAKER: If you are unsure whether an email is \"promotional\" or \"important\", choose \"important\". Only choose \"promotional\" when the email's main purpose is clearly to advertise or sell something. An automated or no-reply sender alone does NOT make an email promotional.\n\n- \"needs_reply\": Direct human inquiries, potential client outreach, freelance/contract project discussions, job opportunities from real recruiters or people, colleagues/clients asking for updates or data.\n\n### SUMMARY GUIDELINES\nFor every email, write a one or two sentence summary. For \"important\" emails, include the key facts you need at a glance (e.g. job title and company for a job alert, course name and deadline for a learning notice, amount and merchant for a payment).\n\n### DRAFT REPLY GUIDELINES (Only for \"needs_reply\")\n- Salutation & Greeting: ALWAYS start the draft with a proper greeting addressing the sender by name:\n  * Use \"Hi [First Name],\" or \"Hello [First Name],\" when the sender's name is known or discernible from the email header/text.\n  * Use \"Hi there,\" or \"Hello,\" if no person's name is available.\n- Tone: Professional, confident, helpful, and polite. Written strictly in the first person (\"I\") as YOUR NAME responding directly.\n- Accuracy: Ground all claims in your actual skills and experience. Never invent unverified skills, fixed rates, or unrealistic promises.\n- Signature Note: Do NOT add a sign-off or signature block at the end of draft_reply, as the signature is appended automatically by the Send Reply Email node.\n- For Client Inquiries & Job/Project Requests:\n  * Thank them for reaching out.\n  * Briefly highlight relevant experience.\n  * Reference your portfolio or website where relevant.\n  * Offer clear next steps (e.g. a quick introductory call or asking for specific project scope details).\n- For Operational/Data Follow-ups from colleagues or clients:\n  * Acknowledge the request politely, confirm receipt, and provide a clear, professional update.\n- If category is \"promotional\" or \"important\", set draft_reply to an empty string \"\".\n"
+        }
+      },
+      "id": "54484c52-6b09-4379-8728-7b86218c637e",
       "name": "Classify Email",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "notes": "System prompt should describe YOUR business/role/services so the AI can write accurate, grounded draft replies. Classifies into promotional / important / needs_reply and returns {category, summary, draft_reply}"
+      "typeVersion": 3.1,
+      "position": [
+        512,
+        192
+      ]
     },
-    {"name": "Gemini Model", "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini", "notes": "Requires a Google Gemini API credential"},
-    {"name": "Email Classification Schema", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "parameters": {"jsonSchemaExample": "{\"category\": \"important\", \"summary\": \"...\", \"draft_reply\": \"...\"}"}},
-    {"name": "Route by Category", "type": "n8n-nodes-base.switch", "notes": "3 outputs: promotional / important / needs_reply"},
-    {"name": "Mark as Read", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
-    {"name": "Notify Important Email", "type": "n8n-nodes-base.telegram", "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}},
-    {"name": "Mark Important Email as Read", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
-    {"name": "Store Draft Reply", "type": "n8n-nodes-base.dataTable", "notes": "Create an n8n Data Table with columns: gmailMessageId, gmailThreadId, fromEmail, subject, draftReply, status, telegramChatId, telegramMessageId", "parameters": {"dataTableId": "YOUR_DATA_TABLE_ID"}},
     {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "id": "12e310fa-4819-46d5-8135-7579a8184ba7",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        416
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"category\": \"important\", \"summary\": \"One or two sentence summary of the email\", \"draft_reply\": \"A ready-to-send reply if one is needed, otherwise an empty string\"}"
+      },
+      "id": "ffee4b3d-8dae-4048-a8be-8559aec78350",
+      "name": "Email Classification Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        416
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.output?.category ?? $json.category ?? '').toString().trim().toLowerCase() }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "promotional"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              }
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.output?.category ?? $json.category ?? '').toString().trim().toLowerCase() }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "important"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              }
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.output?.category ?? $json.category ?? '').toString().trim().toLowerCase() }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "needs_reply"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "1"
+        }
+      },
+      "id": "7c3c2807-356f-42e6-bdec-76b15cd1e3ce",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        176
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('New Email Received').item.json.id }}"
+      },
+      "id": "1cc58cb8-21c9-40cf-aaae-a9347ad2a77b",
+      "name": "Mark as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        0
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Important Email\nFrom: {{ ($('New Email Received').item.json.from.value?.[0]?.name ? $('New Email Received').item.json.from.value[0].name + ' (' + $('New Email Received').item.json.from.value[0].address + ')' : $('New Email Received').item.json.from.value?.[0]?.address || $('New Email Received').item.json.from.text || $('New Email Received').item.json.from).replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\nSubject: {{ $('New Email Received').item.json.subject.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nSummary:\n{{ ($json.output?.summary ?? $json.summary).replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "7e144ba5-8c9d-4f8d-a59e-7a7a24c8c0e9",
+      "name": "Notify Important Email",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        192
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('New Email Received').item.json.id }}"
+      },
+      "id": "01b792d8-04f3-4afb-bc66-605722f33417",
+      "name": "Mark Important Email as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        192
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DATA_TABLE_ID"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "gmailMessageId": "={{ $('New Email Received').item.json.id }}",
+            "gmailThreadId": "={{ $('New Email Received').item.json.threadId }}",
+            "fromEmail": "={{ $('New Email Received').item.json.from.value?.[0]?.address || $('New Email Received').item.json.from.text || $('New Email Received').item.json.from }}",
+            "subject": "={{ $('New Email Received').item.json.subject }}",
+            "draftReply": "={{ $json.output?.draft_reply ?? $json.draft_reply }}",
+            "status": "pending"
+          },
+          "schema": [
+            {
+              "id": "gmailMessageId",
+              "displayName": "gmailMessageId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gmailThreadId",
+              "displayName": "gmailThreadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fromEmail",
+              "displayName": "fromEmail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draftReply",
+              "displayName": "draftReply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7c82296e-b2d9-4508-80eb-6af8af1e6207",
+      "name": "Store Draft Reply",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1136,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Reply Needed\nFrom: {{ ($('New Email Received').item.json.from.value?.[0]?.name ? $('New Email Received').item.json.from.value[0].name + ' (' + $('New Email Received').item.json.from.value[0].address + ')' : $('New Email Received').item.json.from.value?.[0]?.address || $('New Email Received').item.json.from.text || $('New Email Received').item.json.from).replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\nSubject: {{ $('New Email Received').item.json.subject.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nSummary:\n{{ ($('Classify Email').item.json.output?.summary ?? $('Classify Email').item.json.summary).replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nDraft Reply:\n{{ ($('Classify Email').item.json.output?.draft_reply ?? $('Classify Email').item.json.draft_reply).replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Send",
+                    "additionalFields": {
+                      "callback_data": "=send:{{ $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "Reject",
+                    "additionalFields": {
+                      "callback_data": "=reject:{{ $json.id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "bd326c78-fb1a-4642-a0d7-28f809ec74ce",
       "name": "Send Draft for Approval",
       "type": "n8n-nodes-base.telegram",
-      "notes": "Sends the draft with inline Send/Reject buttons (callback_data: send:<rowId> / reject:<rowId>)",
-      "parameters": {"chatId": "YOUR_TELEGRAM_CHAT_ID"}
+      "typeVersion": 1.2,
+      "position": [
+        1360,
+        384
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
     },
-    {"name": "Save Telegram Message Info", "type": "n8n-nodes-base.dataTable", "parameters": {"dataTableId": "YOUR_DATA_TABLE_ID"}},
-    {"name": "Telegram Button Clicked", "type": "n8n-nodes-base.telegramTrigger", "parameters": {"updates": ["callback_query"]}},
-    {"name": "Parse Callback Data", "type": "n8n-nodes-base.code", "notes": "Splits callback_data into action + rowId"},
-    {"name": "Answer Callback Query", "type": "n8n-nodes-base.telegram", "parameters": {"resource": "callback"}},
-    {"name": "Remove Buttons from Message", "type": "n8n-nodes-base.telegram", "parameters": {"operation": "editMessageText"}},
-    {"name": "Get Draft Row", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "get", "dataTableId": "YOUR_DATA_TABLE_ID"}},
-    {"name": "Is Send Action?", "type": "n8n-nodes-base.if"},
-    {"name": "Send Reply Email", "type": "n8n-nodes-base.gmail", "notes": "Appends a signature block after the AI-drafted reply", "parameters": {"sendTo": "={{ $json.fromEmail }}"}},
-    {"name": "Mark Reply Email as Read - Sent", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
-    {"name": "Mark Row as Sent", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "update", "dataTableId": "YOUR_DATA_TABLE_ID"}},
-    {"name": "Notify Sent Confirmation", "type": "n8n-nodes-base.telegram"},
-    {"name": "Mark Row as Rejected", "type": "n8n-nodes-base.dataTable", "parameters": {"operation": "update", "dataTableId": "YOUR_DATA_TABLE_ID"}},
-    {"name": "Mark Reply Email as Read - Rejected", "type": "n8n-nodes-base.gmail", "parameters": {"operation": "markAsRead"}},
-    {"name": "Notify Rejected Confirmation", "type": "n8n-nodes-base.telegram"}
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DATA_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Store Draft Reply').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegramChatId": "={{ $json.result.chat.id }}",
+            "telegramMessageId": "={{ $json.result.message_id }}"
+          },
+          "schema": [
+            {
+              "id": "telegramChatId",
+              "displayName": "telegramChatId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegramMessageId",
+              "displayName": "telegramMessageId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "721f52ac-73c1-42c2-9ca5-11f8b499384f",
+      "name": "Save Telegram Message Info",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1584,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "d05b1a7d-eda2-439c-b49a-68e45af3ea43",
+      "name": "Telegram Button Clicked",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        704
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst cbq = $input.first().json.callback_query;\nif (!cbq) return [];\nconst callbackId = cbq.id;\nconst chatId = String(cbq.message?.chat?.id || '');\nconst messageId = cbq.message?.message_id ? String(cbq.message.message_id) : '';\nconst data = cbq.data || '';\nconst parts = data.split(':');\nconst action = parts[0];\nconst rowId = Number(parts[1]) || parts[1];\n\nreturn [{ json: { action, rowId, callbackId, chatId, messageId } }];\n"
+      },
+      "id": "63aefb2b-f432-44f8-9425-7955a99fee71",
+      "name": "Parse Callback Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $json.callbackId }}",
+        "additionalFields": {
+          "text": "={{ $json.action === 'send' ? 'Sending email...' : 'Rejecting draft...' }}"
+        }
+      },
+      "id": "04e40590-6ff7-4785-be37-db44b2281541",
+      "name": "Answer Callback Query",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        704
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Parse Callback Data').first().json.chatId }}",
+        "messageId": "={{ $('Parse Callback Data').first().json.messageId }}",
+        "text": "={{ $('Parse Callback Data').first().json.action === 'send' ? '⏳ Sending reply...' : '❌ Decision: Rejected' }}",
+        "additionalFields": {}
+      },
+      "id": "7a47949e-aca8-4cf6-8872-c3a4ae1d6960",
+      "name": "Remove Buttons from Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        704
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DATA_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Parse Callback Data').first().json.rowId }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "8c56cdfb-c98c-493a-b49a-c6d7b125662c",
+      "name": "Get Draft Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Parse Callback Data').first().json.action }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "send",
+              "id": "6aca174b-3dfc-4f87-a6b2-fe5a4edb4ca6"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4cb095b-7980-47a7-9657-0b2422baec69",
+      "name": "Is Send Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        704
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Get Draft Row').first().json.fromEmail }}",
+        "subject": "=Re: {{ $('Get Draft Row').first().json.subject }}",
+        "message": "={{ $('Get Draft Row').first().json.draftReply.trim().replace(/\\n/g, '<br>') + '<br><br>Best Regards,<br><strong>YOUR NAME</strong><br>YOUR TITLE<br><a href=\"https://YOUR_WEBSITE\">https://YOUR_WEBSITE</a>' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "fd9aac95-60d2-4c6e-967b-11547c4fdaf3",
+      "name": "Send Reply Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        608
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Get Draft Row').first().json.gmailMessageId }}"
+      },
+      "id": "4a0c156b-0049-4a2f-a550-2f7753c0a4d4",
+      "name": "Mark Reply Email as Read - Sent",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        608
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DATA_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Get Draft Row').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "sent"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d7e0fb0d-b6be-4c02-ad20-a3664fe3288d",
+      "name": "Mark Row as Sent",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Callback Data').first().json.chatId }}",
+        "text": "=✅ Reply sent to {{ $('Get Draft Row').first().json.fromEmail.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nSubject: {{ $('Get Draft Row').first().json.subject.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nStatus: Sent &amp; Marked as Read in Gmail",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "f47c4184-5571-4d2e-93a0-17b8433aa811",
+      "name": "Notify Sent Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        608
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DATA_TABLE_ID"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Get Draft Row').first().json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a4ec88aa-6de4-4cfb-be93-bab2da5ce3d7",
+      "name": "Mark Row as Rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Get Draft Row').first().json.gmailMessageId }}"
+      },
+      "id": "ee501865-b426-45be-93fd-f7b472e776fc",
+      "name": "Mark Reply Email as Read - Rejected",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        800
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Callback Data').first().json.chatId }}",
+        "text": "=❌ Reply rejected for {{ $('Get Draft Row').first().json.fromEmail.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nSubject: {{ $('Get Draft Row').first().json.subject.replace(/&/g, '&amp;').replace(/</g, '[').replace(/>/g, ']') }}\n\nStatus: Rejected (no email sent) &amp; Marked as Read in Gmail",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "8ca1e91c-2551-4004-a18f-2f7ad6d1b925",
+      "name": "Notify Rejected Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        800
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram bot"
+        }
+      }
+    }
   ],
   "connections": {
-    "New Email Received": {"main": [[{"node": "Throttle Before Classify"}]]},
-    "Throttle Before Classify": {"main": [[{"node": "Classify Email"}]]},
-    "Classify Email": {"main": [[{"node": "Route by Category"}]]},
-    "Route by Category": {"main": [[{"node": "Mark as Read"}], [{"node": "Notify Important Email"}], [{"node": "Store Draft Reply"}]]},
-    "Notify Important Email": {"main": [[{"node": "Mark Important Email as Read"}]]},
-    "Store Draft Reply": {"main": [[{"node": "Send Draft for Approval"}]]},
-    "Send Draft for Approval": {"main": [[{"node": "Save Telegram Message Info"}]]},
-    "Telegram Button Clicked": {"main": [[{"node": "Parse Callback Data"}]]},
-    "Parse Callback Data": {"main": [[{"node": "Answer Callback Query"}]]},
-    "Answer Callback Query": {"main": [[{"node": "Remove Buttons from Message"}]]},
-    "Remove Buttons from Message": {"main": [[{"node": "Get Draft Row"}]]},
-    "Get Draft Row": {"main": [[{"node": "Is Send Action?"}]]},
-    "Is Send Action?": {"main": [[{"node": "Send Reply Email"}], [{"node": "Mark Row as Rejected"}]]},
-    "Send Reply Email": {"main": [[{"node": "Mark Reply Email as Read - Sent"}]]},
-    "Mark Reply Email as Read - Sent": {"main": [[{"node": "Mark Row as Sent"}]]},
-    "Mark Row as Sent": {"main": [[{"node": "Notify Sent Confirmation"}]]},
-    "Mark Row as Rejected": {"main": [[{"node": "Mark Reply Email as Read - Rejected"}]]},
-    "Mark Reply Email as Read - Rejected": {"main": [[{"node": "Notify Rejected Confirmation"}]]}
+    "Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Important Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Important Email as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Draft Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Draft for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Draft for Approval": {
+      "main": [
+        [
+          {
+            "node": "Save Telegram Message Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Button Clicked": {
+      "main": [
+        [
+          {
+            "node": "Parse Callback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Callback Data": {
+      "main": [
+        [
+          {
+            "node": "Answer Callback Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Callback Query": {
+      "main": [
+        [
+          {
+            "node": "Remove Buttons from Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Buttons from Message": {
+      "main": [
+        [
+          {
+            "node": "Get Draft Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Draft Row": {
+      "main": [
+        [
+          {
+            "node": "Is Send Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Reply Email as Read - Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Reply Email as Read - Sent": {
+      "main": [
+        [
+          {
+            "node": "Mark Row as Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Row as Sent": {
+      "main": [
+        [
+          {
+            "node": "Notify Sent Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Row as Rejected": {
+      "main": [
+        [
+          {
+            "node": "Mark Reply Email as Read - Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Reply Email as Read - Rejected": {
+      "main": [
+        [
+          {
+            "node": "Notify Rejected Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Email Received": {
+      "main": [
+        [
+          {
+            "node": "Throttle Before Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Throttle Before Classify": {
+      "main": [
+        [
+          {
+            "node": "Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify Email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Classification Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Classify Email",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Important Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Send Action?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Row as Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "Gmail", "Google Gemini", "Telegram", "n8n Data Tables"],
-    "setup_notes": "Requires: a Gmail OAuth2 credential, a Google Gemini API credential, a Telegram bot credential, and an n8n Data Table (see Store Draft Reply node notes for the schema). Replace all YOUR_* placeholders and rewrite the Classify Email system prompt with your own business details before use."
+    "templateCredsSetupCompleted": false
   }
 }

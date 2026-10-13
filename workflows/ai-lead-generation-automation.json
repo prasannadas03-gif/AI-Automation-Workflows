@@ -1,48 +1,1429 @@
 {
   "name": "AI Lead Generation Automation",
-  "description": "100% free-tier B2B lead qualification engine. Scans free open job/signal feeds (Arbeitnow, Jobicy, RemoteOK, Hacker News), keyword-scores for automation pain, filters duplicates against your CRM, runs a dual-stage Gemini qualification (a primary qualifier, then a deliberately skeptical auditor with veto power), and saves only approved leads.",
   "nodes": [
-    {"name": "Manual Trigger", "type": "n8n-nodes-base.manualTrigger"},
-    {"name": "Schedule Daily 8 AM & 4 PM", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {"rule": {"interval": [{"triggerAtHour": 8}, {"triggerAtHour": 16}]}}},
-    {"name": "Fetch Arbeitnow Free API", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed", "parameters": {"url": "https://www.arbeitnow.com/api/job-board-api"}},
-    {"name": "Fetch Jobicy Free API", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed", "parameters": {"url": "https://jobicy.com/api/v2/remote-jobs?count=40"}},
-    {"name": "Fetch RemoteOK Free Feed", "type": "n8n-nodes-base.httpRequest", "notes": "Public API, no credential needed. Send a User-Agent header or RemoteOK blocks the request", "parameters": {"url": "https://remoteok.com/api"}},
-    {"name": "Fetch HN Automation Pain Signals", "type": "n8n-nodes-base.httpRequest", "notes": "HN Algolia search, public, no credential needed", "parameters": {"url": "https://hn.algolia.com/api/v1/search_by_date?query=%22need+automation%22+OR+%22automate+this+process%22&tags=(comment,story)&hitsPerPage=50"}},
-    {"name": "Fetch HN Manual Process Signals", "type": "n8n-nodes-base.httpRequest", "notes": "HN Algolia search, public, no credential needed", "parameters": {"url": "https://hn.algolia.com/api/v1/search_by_date?query=%22still+using+spreadsheets%22+OR+%22manually+update%22&tags=(comment,story)&hitsPerPage=50"}},
-    {"name": "Combine Feeds", "type": "n8n-nodes-base.merge", "parameters": {"numberInputs": 5}},
-    {"name": "Normalize & Signal Scoring", "type": "n8n-nodes-base.code", "notes": "Normalizes all feed shapes into a common lead schema and keyword-scores each item across 9 automation-pain signal groups"},
-    {"name": "Fetch Existing CRM Leads", "type": "n8n-nodes-base.airtable", "notes": "Requires an Airtable credential", "parameters": {"operation": "search", "base": "YOUR_AIRTABLE_BASE_ID", "table": "YOUR_AIRTABLE_TABLE_ID"}},
-    {"name": "Filter Duplicates & Enterprises", "type": "n8n-nodes-base.code", "notes": "Drops known enterprise domains and anything already in the CRM by URL or company name"},
-    {"name": "Primary Gemini AI Qualification", "type": "@n8n/n8n-nodes-langchain.googleGemini", "notes": "Requires a Google Gemini API credential. Scores each lead 0-100 against a detailed rubric and returns qualified/lead_score/buying_intent/etc"},
-    {"name": "Parse & Validate Primary AI JSON", "type": "n8n-nodes-base.code", "notes": "Parses/repairs the AI's JSON output with sane fallbacks on malformed output"},
-    {"name": "Check Qualification Gate", "type": "n8n-nodes-base.if", "notes": "qualified=true AND lead_score>=70 AND target_fit != REJECT AND ai_parse_status=SUCCESS"},
-    {"name": "Skeptical AI Validator", "type": "@n8n/n8n-nodes-langchain.googleGemini", "notes": "A second, deliberately skeptical Gemini pass with hard veto power over the primary qualification"},
-    {"name": "Check Validation Gate", "type": "n8n-nodes-base.if", "notes": "Passes only if the skeptical auditor's audit_pass/approved flag is true"},
-    {"name": "Format & Enrich Lead for CRM", "type": "n8n-nodes-base.code", "notes": "Merges both AI passes into final score/priority/temperature and maps to your Airtable field IDs"},
-    {"name": "Save To RINDAX Leads CRM", "type": "n8n-nodes-base.airtable", "parameters": {"operation": "create", "base": "YOUR_AIRTABLE_BASE_ID", "table": "YOUR_AIRTABLE_TABLE_ID"}}
+    {
+      "parameters": {},
+      "id": "711edd06-22fa-4264-8d9c-cdaedda67f4d",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        80,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.arbeitnow.com/api/job-board-api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "77fcdd71-7668-4501-99c9-930acab99ffd",
+      "name": "Fetch Arbeitnow Free API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        304,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "id": "5aa42912-7574-40b8-857c-1ae78e6ce1e3",
+      "name": "Combine Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        528,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jobicy.com/api/v2/remote-jobs?count=40",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "0558c4e4-cf28-4889-9a35-7547e07a1eb1",
+      "name": "Fetch Jobicy Free API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        304,
+        400
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst normalizedLeads = [];\nconst seenOppIds = new Set();\nconst now = new Date();\nconst today = now.toISOString().split('T')[0];\n\nfunction getNormalizedDomain(urlStr) {\n  if (!urlStr) return '';\n  try {\n    let clean = urlStr.trim().toLowerCase();\n    clean = clean.replace(/^[a-zA-Z]+:\\/\\//, '');\n    clean = clean.replace(/^www\\./, '');\n    clean = clean.split('/')[0];\n    clean = clean.split('?')[0];\n    clean = clean.split('#')[0];\n    return clean;\n  } catch (e) {\n    return '';\n  }\n}\n\nconst SIGNAL_GROUPS = {\n  data: ['excel', 'spreadsheet', 'google sheets', 'data entry', 'data processing', 'csv', 'database', 'data management', 'copy/paste', 'data cleanup', 'data collection'],\n  crm_sales: ['crm', 'salesforce', 'hubspot', 'pipedrive', 'lead management', 'customer records', 'sales pipeline', 'lead qualification', 'lead follow-up', 'prospect follow-up', 'customer follow-up'],\n  communication: ['email management', 'correspondence', 'customer inquiries', 'inquiry handling', 'follow-up', 'outreach', 'notifications', 'reminders', 'whatsapp', 'messaging'],\n  operations: ['operations assistant', 'operations coordinator', 'manual process', 'repetitive', 'workflow', 'process management', 'back office', 'administrative support', 'administrative'],\n  reporting: ['weekly reports', 'monthly reports', 'kpi', 'metrics', 'dashboard', 'management reports', 'data analysis', 'recurring reports', 'reporting'],\n  scheduling: ['appointment', 'booking', 'scheduling', 'calendar', 'reminders', 'rescheduling', 'appointment management'],\n  documents: ['invoice', 'invoicing', 'quotation', 'quote', 'proposal', 'contract', 'pdf', 'document processing', 'document generation', 'forms', 'paperwork'],\n  customer_service: ['customer support', 'support tickets', 'customer inquiries', 'faq', 'ticket management', 'customer onboarding', 'customer requests', 'review requests'],\n  recruitment: ['recruitment', 'recruiting', 'resume', 'cv', 'candidate', 'applicant', 'interview scheduling', 'candidate screening', 'hiring workflow', 'applicant tracking']\n};\n\nconst CONTEXTUAL_SIGNALS = [\n  'maintain crm records', 'maintain spreadsheets', 'customer inquiries', 'weekly reporting',\n  'invoice generation', 'data cleanup', 'lead qualification', 'quote generation',\n  'document collection', 'onboarding workflow', 'schedule interviews', 'candidate follow-up',\n  'still using spreadsheets', 'manually update our crm', 'manual workflow'\n];\n\nconst HIGH_INTENT_SIGNALS = [\n  'manually update', 'manual data entry', 'manually follow up', 'manually entering',\n  'manual process', 'manual reporting', 'copy and paste', 'manual verification',\n  'repetitive data', 'updating spreadsheets daily', 'manual inquiry handling',\n  'still using spreadsheets', 'looking for automation', 'need automation help',\n  'automate this process', 'hiring automation', 'n8n workflow', 'zapier integration'\n];\n\nconst ENTERPRISE_REGEX = /\\b(amazon|google|meta|microsoft|apple|walmart|accenture|deloitte|pwc|kpmg|ey|tcs|infosys|uber|salesforce|ibm|oracle|cognizant|capgemini|wipro|cisco|intel|jpmorgan|goldman sachs|bank of america|wells fargo|target corp|target corporation)\\b/i;\n\nfunction scoreText(fullText) {\n  let signalScore = 0;\n  const detectedSignals = [];\n  const countedPhrases = new Set();\n  for (const [groupName, keywords] of Object.entries(SIGNAL_GROUPS)) {\n    const matched = keywords.filter(kw => fullText.includes(kw));\n    if (matched.length > 0) {\n      detectedSignals.push({ group: groupName, matched: matched.slice(0, 3) });\n      signalScore += 1;\n    }\n  }\n  for (const phrase of CONTEXTUAL_SIGNALS) {\n    if (fullText.includes(phrase) && !countedPhrases.has(phrase)) {\n      signalScore += 2;\n      countedPhrases.add(phrase);\n    }\n  }\n  for (const phrase of HIGH_INTENT_SIGNALS) {\n    if (fullText.includes(phrase) && !countedPhrases.has(phrase)) {\n      signalScore += 3;\n      countedPhrases.add(phrase);\n    }\n  }\n  return { signalScore, detectedSignals, countedPhrases };\n}\n\nfor (const item of items) {\n  const data = item.json;\n\n  // Ignore error objects from failed/empty requests\n  if (data?.error || data?.statusCode >= 400 || data?.message === 'Forbidden') {\n    continue;\n  }\n\n  // A0. Hacker News Algolia Search Response (stories/comments)\n  if (data?.hits && Array.isArray(data.hits)) {\n    for (const hit of data.hits) {\n      if (!hit) continue;\n      const title = (hit.title || hit.story_title || '').trim();\n      const commentText = (hit.comment_text || '').replace(/<[^>]*>/g, ' ').trim();\n      const storyText = (hit.story_text || '').replace(/<[^>]*>/g, ' ').trim();\n      const bodyText = commentText || storyText || '';\n      if (!title && !bodyText) continue;\n\n      const fullText = (title + ' ' + bodyText).toLowerCase();\n      const { signalScore, detectedSignals, countedPhrases } = scoreText(fullText);\n      if (signalScore < 3) continue;\n\n      const author = hit.author || '';\n      const objectId = hit.objectID || '';\n      const storyId = hit.story_id || objectId;\n      const permalink = 'https://news.ycombinator.com/item?id=' + (storyId || objectId);\n\n      let signalAgeDays = 0;\n      let freshnessStatus = 'RECENT';\n      if (hit.created_at_i) {\n        const postDate = new Date(hit.created_at_i * 1000);\n        signalAgeDays = Math.max(0, Math.floor((now - postDate) / (1000 * 60 * 60 * 24)));\n        if (signalAgeDays <= 3) freshnessStatus = 'VERY_FRESH';\n        else if (signalAgeDays <= 14) freshnessStatus = 'FRESH';\n        else if (signalAgeDays <= 30) freshnessStatus = 'AGING';\n        else freshnessStatus = 'STALE';\n      }\n\n      const companyOrPoster = author ? ('u/' + author + ' (Hacker News)') : (title.substring(0, 40) + ' (Hacker News)');\n      const oppId = 'hn_' + (objectId || permalink.replace(/[^a-zA-Z0-9]/g, '').slice(-16));\n\n      if (seenOppIds.has(oppId)) continue;\n      seenOppIds.add(oppId);\n\n      normalizedLeads.push({\n        json: {\n          company_name: companyOrPoster,\n          raw_job_title: title || bodyText.substring(0, 80),\n          normalized_domain: 'news.ycombinator.com',\n          website: permalink,\n          location: 'Global',\n          source_platform: 'HackerNews',\n          source_type: 'Hacker News',\n          source_url: 'https://news.ycombinator.com',\n          original_job_url: permalink,\n          opportunity_id: oppId,\n          posted_at: hit.created_at_i ? new Date(hit.created_at_i * 1000).toISOString().split('T')[0] : today,\n          signal_age_days: signalAgeDays,\n          freshness_status: freshnessStatus,\n          signal_score: signalScore,\n          preliminary_enterprise_flag: false,\n          detected_signal_groups: detectedSignals.map(s => s.group + ': [' + s.matched.join(', ') + ']').join(' | '),\n          matched_contextual_phrases: Array.from(countedPhrases).join(', '),\n          raw_evidence: 'Hacker News: ' + bodyText.substring(0, 2500) + (title ? (' (Title: ' + title + ')') : '')\n        }\n      });\n    }\n    continue;\n  }\n\n  // A. Reddit Native Search Response\n  if (data?.data?.children && Array.isArray(data.data.children)) {\n    for (const child of data.data.children) {\n      const post = child?.data;\n      if (!post) continue;\n\n      const title = (post.title || '').trim();\n      const selftext = (post.selftext || '').trim();\n      const author = (post.author || '').trim();\n      const subreddit = post.subreddit_name_prefixed || ('r/' + (post.subreddit || 'smallbusiness'));\n      const permalink = post.permalink ? ('https://www.reddit.com' + post.permalink) : (post.url || '');\n      const postId = post.id || post.name || '';\n      \n      if (!title && !selftext) continue;\n\n      const fullText = (title + ' ' + selftext).toLowerCase();\n      const { signalScore, detectedSignals, countedPhrases } = scoreText(fullText);\n\n      if (signalScore < 3) continue;\n\n      let signalAgeDays = 0;\n      let freshnessStatus = 'RECENT';\n      if (post.created_utc) {\n        const postDate = new Date(post.created_utc * 1000);\n        signalAgeDays = Math.max(0, Math.floor((now - postDate) / (1000 * 60 * 60 * 24)));\n        if (signalAgeDays <= 3) freshnessStatus = 'VERY_FRESH';\n        else if (signalAgeDays <= 14) freshnessStatus = 'FRESH';\n        else if (signalAgeDays <= 30) freshnessStatus = 'AGING';\n        else freshnessStatus = 'STALE';\n      }\n\n      const companyOrPoster = (author && author !== '[deleted]') ? ('u/' + author + ' (' + subreddit + ')') : (title.substring(0, 40) + ' (' + subreddit + ')');\n      const oppId = 'reddit_' + (postId || permalink.replace(/[^a-zA-Z0-9]/g, '').slice(-16));\n      \n      if (seenOppIds.has(oppId)) continue;\n      seenOppIds.add(oppId);\n\n      normalizedLeads.push({\n        json: {\n          company_name: companyOrPoster,\n          raw_job_title: title,\n          normalized_domain: 'reddit.com',\n          website: permalink,\n          location: 'USA / UK / Global',\n          source_platform: 'Reddit',\n          source_type: 'Reddit ' + subreddit,\n          source_url: 'https://www.reddit.com/' + (post.subreddit ? ('r/' + post.subreddit) : ''),\n          original_job_url: permalink,\n          opportunity_id: oppId,\n          posted_at: post.created_utc ? new Date(post.created_utc * 1000).toISOString().split('T')[0] : today,\n          signal_age_days: signalAgeDays,\n          freshness_status: freshnessStatus,\n          signal_score: signalScore,\n          preliminary_enterprise_flag: false,\n          detected_signal_groups: detectedSignals.map(s => s.group + ': [' + s.matched.join(', ') + ']').join(' | '),\n          matched_contextual_phrases: Array.from(countedPhrases).join(', '),\n          raw_evidence: 'Direct Reddit Buyer Intent (' + subreddit + '): ' + (selftext ? selftext.substring(0, 2500) : title) + ' (Post Title: ' + title + ')'\n        }\n      });\n    }\n    continue;\n  }\n\n  // B. Job Board & API Feeds\n  const jobs = Array.isArray(data) ? data : (data.data || data.jobs || [data]);\n\n  for (const job of jobs) {\n    if (!job || typeof job !== 'object' || Array.isArray(job)) continue;\n    const rawTitle = (job.title || job.jobTitle || job.position || '').trim();\n    const rawCompany = (job.company_name || job.company || '').trim();\n    const rawDesc = job.description || job.jobDescription || job.content || '';\n    const rawJobUrl = job.url || job.jobUrl || job.apply_url || '';\n    const location = job.location || job.candidate_required_location || 'USA / UK / Remote';\n    const jobId = job.id || job.slug || '';\n    \n    let sourcePlatform = 'Job Feed';\n    let sourceType = 'Job Feed';\n    if (rawJobUrl.includes('arbeitnow') || (job.slug && !job.company_url)) {\n      sourcePlatform = 'Arbeitnow';\n      sourceType = 'Arbeitnow';\n    } else if (rawJobUrl.includes('jobicy') || job.jobSlug) {\n      sourcePlatform = 'Jobicy';\n      sourceType = 'Jobicy';\n    } else if (rawJobUrl.includes('remoteok')) {\n      sourcePlatform = 'RemoteOK';\n      sourceType = 'RemoteOK';\n    }\n\n    if (!rawCompany || !rawDesc || rawDesc.length < 50) continue;\n\n    const cleanCompany = rawCompany.replace(/[\\(\\[].*?[\\\\)\\\\]]/g, '').trim();\n    const normalizedDomain = getNormalizedDomain(job.company_url || rawJobUrl);\n\n    const fullText = (rawTitle + ' ' + rawDesc).toLowerCase();\n    const { signalScore, detectedSignals, countedPhrases } = scoreText(fullText);\n\n    if (signalScore < 3) continue;\n\n    let signalAgeDays = 0;\n    let freshnessStatus = 'RECENT';\n    if (job.created_at || job.pubDate || job.date) {\n      const parsedDate = new Date(job.created_at || job.pubDate || job.date);\n      if (!isNaN(parsedDate.getTime())) {\n        signalAgeDays = Math.max(0, Math.floor((now - parsedDate) / (1000 * 60 * 60 * 24)));\n        if (signalAgeDays <= 3) freshnessStatus = 'VERY_FRESH';\n        else if (signalAgeDays <= 14) freshnessStatus = 'FRESH';\n        else if (signalAgeDays <= 30) freshnessStatus = 'AGING';\n        else freshnessStatus = 'STALE';\n      }\n    }\n\n    let oppId = '';\n    if (jobId) {\n      oppId = sourcePlatform.toLowerCase() + '_' + jobId;\n    } else if (rawJobUrl) {\n      oppId = sourcePlatform.toLowerCase() + '_' + rawJobUrl.replace(/[^a-zA-Z0-9]/g, '').slice(-20);\n    } else {\n      oppId = (normalizedDomain || cleanCompany.replace(/[^a-zA-Z0-9]/g, '')) + '_' + rawTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);\n    }\n\n    if (seenOppIds.has(oppId.toLowerCase())) continue;\n    seenOppIds.add(oppId.toLowerCase());\n\n    const isEnterprise = ENTERPRISE_REGEX.test(cleanCompany) || (normalizedDomain && ENTERPRISE_REGEX.test(normalizedDomain));\n\n    normalizedLeads.push({\n      json: {\n        company_name: cleanCompany,\n        raw_job_title: rawTitle,\n        normalized_domain: normalizedDomain,\n        website: normalizedDomain ? 'https://' + normalizedDomain : (rawJobUrl.startsWith('http') ? rawJobUrl : ''),\n        location: location,\n        source_platform: sourcePlatform,\n        source_type: sourceType,\n        source_url: rawJobUrl.includes('arbeitnow') ? 'https://www.arbeitnow.com' : (rawJobUrl.includes('jobicy') ? 'https://jobicy.com' : (rawJobUrl.includes('remoteok') ? 'https://remoteok.com' : rawJobUrl)),\n        original_job_url: rawJobUrl,\n        opportunity_id: oppId,\n        posted_at: today,\n        signal_age_days: signalAgeDays,\n        freshness_status: freshnessStatus,\n        signal_score: signalScore,\n        preliminary_enterprise_flag: isEnterprise,\n        detected_signal_groups: detectedSignals.map(s => s.group + ': [' + s.matched.join(', ') + ']').join(' | '),\n        matched_contextual_phrases: Array.from(countedPhrases).join(', '),\n        raw_evidence: rawDesc.substring(0, 3000)\n      }\n    });\n  }\n}\n\nreturn normalizedLeads;"
+      },
+      "id": "4914dc97-0dc0-4610-98de-f485870e084a",
+      "name": "Normalize & Signal Scoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "mode": "id",
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "mode": "id",
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_TABLE_ID"
+        },
+        "options": {
+          "fields": [
+            "YOUR_AIRTABLE_FIELD_ID",
+            "YOUR_AIRTABLE_FIELD_ID",
+            "YOUR_AIRTABLE_FIELD_ID"
+          ]
+        }
+      },
+      "id": "73f8440c-f801-43ec-ae6f-ed4fa319eacb",
+      "name": "Fetch Existing CRM Leads",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        976,
+        496
+      ],
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable  Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidateLeads = $('Normalize & Signal Scoring').all();\nlet existingRecords = [];\ntry {\n  existingRecords = $('Fetch Existing CRM Leads').all();\n} catch (e) {\n  existingRecords = [];\n}\n\nconst existingUrls = new Set();\nconst existingCompanyNames = new Set();\n\nfor (const r of existingRecords) {\n  const comp = (r.json.fields?.YOUR_AIRTABLE_FIELD_ID || r.json['Company Name'] || '').toLowerCase().trim();\n  const url = (r.json.fields?.YOUR_AIRTABLE_FIELD_ID || r.json['Website'] || '').toLowerCase().trim();\n  if (comp) existingCompanyNames.add(comp);\n  if (url) existingUrls.add(url);\n}\n\nconst HARD_ENTERPRISE_DOMAINS = new Set([\n  'amazon.com', 'google.com', 'meta.com', 'microsoft.com', 'apple.com',\n  'walmart.com', 'accenture.com', 'deloitte.com', 'pwc.com', 'kpmg.com',\n  'ey.com', 'tcs.com', 'infosys.com', 'uber.com', 'salesforce.com',\n  'ibm.com', 'oracle.com', 'cognizant.com', 'capgemini.com', 'wipro.com'\n]);\n\nconst qualified = [];\n\nfor (const item of candidateLeads) {\n  const lead = item.json;\n  const compLower = (lead.company_name || '').toLowerCase().trim();\n  const domainLower = (lead.normalized_domain || '').toLowerCase().trim();\n  const jobUrlLower = (lead.original_job_url || lead.website || '').toLowerCase().trim();\n\n  if (!compLower || compLower.length < 2) continue;\n\n  if (domainLower && HARD_ENTERPRISE_DOMAINS.has(domainLower)) {\n    continue;\n  }\n\n  // Opportunity-Level Dedup: Check exact job/source URL\n  if (jobUrlLower && existingUrls.has(jobUrlLower)) {\n    continue;\n  }\n\n  let isExistingCompanyNewOpp = false;\n  if (existingCompanyNames.has(compLower)) {\n    isExistingCompanyNewOpp = true;\n  }\n\n  lead.is_existing_company_new_opp = isExistingCompanyNewOpp;\n  qualified.push({ json: lead });\n}\n\nreturn qualified;"
+      },
+      "id": "78ac991e-2660-4ac1-9456-766f58a11561",
+      "name": "Filter Duplicates & Enterprises",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "leftValue": "={{ $json.qualified }}",
+              "id": "f5b34651-400f-42dc-9879-3551484be771"
+            },
+            {
+              "operator": {
+                "operation": "gte",
+                "type": "number"
+              },
+              "leftValue": "={{ $json.lead_score }}",
+              "rightValue": 70,
+              "id": "c9c11581-fa37-4606-bc7b-b7621a03ab06"
+            },
+            {
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "leftValue": "={{ $json.target_fit }}",
+              "rightValue": "REJECT",
+              "id": "987d55e6-b298-4694-9351-0a9b55031777"
+            },
+            {
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "leftValue": "={{ $json.automation_need }}",
+              "id": "d1b1e78c-5726-4d41-bf8d-c78dd135a0ca"
+            },
+            {
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "leftValue": "={{ $json.commercial_potential }}",
+              "id": "77363c95-c8c9-4521-9bc5-23ee8e62a6e2"
+            },
+            {
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "leftValue": "={{ $json.ai_parse_status }}",
+              "rightValue": "SUCCESS",
+              "id": "0106e151-0e08-4bc1-a6f8-79a0f20e9356"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "124f80c9-9d30-4396-94a2-a710c68905cf",
+      "name": "Check Qualification Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1776,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "mode": "list",
+          "__rl": true,
+          "value": "models/gemini-2.5-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Company: {{ $json.company_name }}\nSource Platform: {{ $json.source_platform }}\nOriginal Evidence: {{ $json.raw_evidence.substring(0, 1800) }}\n\nPrimary AI Assessment:\n- Identified Pain Signal: {{ $json.pain_signal }}\n- Proposed Automation Opportunity: {{ $json.automation_opportunity }}\n- Assigned Lead Score: {{ $json.lead_score }}\n- Intent Score: {{ $json.intent_score }}\n- Buying Intent: {{ $json.buying_intent }}\n- Commercial Readiness: {{ $json.commercial_readiness }}\n- Target Fit: {{ $json.target_fit }}\n\nPerform your skeptical audit and return strictly formatted JSON."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are a skeptical B2B sales auditor for RINDAX.\nYour sole job is to DISPROVE lead qualifications and eliminate false-positive leads.\n\nAUDIT CHECKLIST:\n1. Is there real business pain grounded in direct evidence?\n2. Is the pain current and operational?\n3. Is there an actual automation opportunity realistically solvable by RINDAX (n8n/AI/dashboards)?\n4. Is there evidence of commercial intent vs just general talk?\n5. Is the company a valid small business target (≤50 staff or small agile team)?\n6. Is the Primary AI score justified or over-interpreted?\n7. Does the evidence use unsupported assumptions instead of facts?\n\nIf evidence is weak, lower the score or veto the lead. You possess a HARD VETO.\n\nREQUIRED OUTPUT JSON:\n{\n  \"audit_pass\": boolean,\n  \"final_decision\": \"APPROVED\" | \"REJECTED\",\n  \"pain_verified\": boolean,\n  \"automation_opportunity_verified\": boolean,\n  \"buying_intent_verified\": boolean,\n  \"commercial_readiness\": \"READY_TO_BUY\" | \"LIKELY_TO_BUY\" | \"EARLY_RESEARCH\" | \"PAIN_ONLY\" | \"NO_COMMERCIAL_SIGNAL\",\n  \"opportunity_type\": string,\n  \"evidence_strength\": string,\n  \"final_score\": number,\n  \"final_intent_score\": number,\n  \"score_adjustment\": number,\n  \"audit_reason\": string,\n  \"key_risks\": string[]\n}"
+        }
+      },
+      "id": "30070263-2d3a-4dc4-a2a6-22dc1ecae172",
+      "name": "Skeptical AI Validator",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        688
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "leftValue": "={{ typeof $json.message?.content === \"string\" ? (JSON.parse($json.message.content).audit_pass || JSON.parse($json.message.content).approved) : ($json.audit_pass || $json.approved) }}"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "dfbbea19-39b1-43f0-b096-563ba2c0b999",
+      "name": "Check Validation Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2352,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const primary = $('Parse & Validate Primary AI JSON').item.json;\nconst validatorRaw = $('Skeptical AI Validator').item.json;\nlet validator = {};\ntry {\n  validator = typeof validatorRaw.message?.content === 'string' ? JSON.parse(validatorRaw.message.content) : validatorRaw;\n} catch (e) {\n  validator = validatorRaw;\n}\n\nconst today = new Date().toISOString().split('T')[0];\n\n// 1. Calculate final scores\nconst scoreAdjustment = typeof validator.score_adjustment === 'number' ? validator.score_adjustment : 0;\nconst finalScore = typeof validator.final_score === 'number' ? validator.final_score : Math.max(0, Math.min(100, (primary.lead_score || 75) + scoreAdjustment));\nconst finalIntentScore = typeof validator.final_intent_score === 'number' ? validator.final_intent_score : Math.max(0, Math.min(25, (primary.intent_score || 15)));\n\n// 2. Final Priority Classification (P1 / P2 / P3 / REJECT)\nlet priorityTier = 'P3 — POTENTIAL OPPORTUNITY';\nif (finalScore >= 85 && finalIntentScore >= 18 && (primary.buying_intent === 'VERY_HIGH' || primary.buying_intent === 'HIGH')) {\n  priorityTier = 'P1 — HIGH-INTENT';\n} else if (finalScore >= 75 && (primary.commercial_readiness === 'READY_TO_BUY' || primary.commercial_readiness === 'LIKELY_TO_BUY' || primary.commercial_readiness === 'EARLY_RESEARCH')) {\n  priorityTier = 'P2 — STRONG OPPORTUNITY';\n}\n\n// 3. Temperature mapping\nlet temp = 'Cold';\nif (finalScore >= 85) temp = 'Hot';\nelse if (finalScore >= 75) temp = 'Warm';\n\n// 4. Map company size to verified Airtable select options: \"Solo\" | \"2-5\" | \"5-15\" | \"15-30\"\nlet sizeOption = '5-15';\nconst rawSize = String(primary.company_size || '').toLowerCase();\nif (rawSize.includes('solo') || rawSize === '1') sizeOption = 'Solo';\nelse if (rawSize.includes('2-5')) sizeOption = '2-5';\nelse if (rawSize.includes('5-15')) sizeOption = '5-15';\nelse if (rawSize.includes('15-30') || rawSize.includes('30') || rawSize.includes('50')) sizeOption = '15-30';\n\n// 5. Format Decision Maker display (no fabrication)\nlet dmDisplay = '';\nif (primary.decision_maker_name && primary.decision_maker_name.trim().length > 1) {\n  dmDisplay = primary.decision_maker_name.trim();\n  if (primary.decision_maker_role) dmDisplay += ' (' + primary.decision_maker_role.trim() + ')';\n}\n\n// 6. Outreach Readiness Gate\nconst isOutreachReady = Boolean(\n  primary.company_name &&\n  (primary.website || primary.original_job_url) &&\n  primary.evidence &&\n  primary.automation_opportunity &&\n  primary.personalization_angle &&\n  primary.recommended_service &&\n  finalScore >= 70 &&\n  primary.qualified &&\n  (validator.audit_pass || validator.approved)\n);\n\n// 7. Structure rich intelligence inside \"Why Fit\" field (YOUR_AIRTABLE_FIELD_ID)\nconst whyFitStructured = [\n  '🏆 PRIORITY: ' + priorityTier + ' | Score: ' + finalScore + '/100 (Intent: ' + finalIntentScore + '/25) | Temp: ' + temp,\n  '🎯 TARGET FIT: ' + (primary.target_fit || 'GOOD') + ' | Buying Intent: ' + (primary.buying_intent || 'UNKNOWN') + ' | Readiness: ' + (primary.commercial_readiness || 'UNKNOWN'),\n  '⚡ PAIN SIGNAL: ' + (primary.pain_signal || 'Manual operations and reporting bottleneck detected.'),\n  '🛠️ PROPOSED WORKFLOW: ' + (primary.automation_opportunity || 'Inbound lead intake → AI qualification → CRM sync → automated follow-up'),\n  '📊 METRICS: Type: ' + (primary.opportunity_type || 'AUTOMATION_PROJECT') + ' | Competition: ' + (primary.competition_level || 'MEDIUM') + ' | Freshness: ' + (primary.freshness_status || 'RECENT') + ' (' + (primary.signal_age_days || 0) + 'd ago)',\n  '🔍 EVIDENCE [' + (primary.evidence_type || 'Factual Paraphrase') + ' (Conf: ' + (primary.evidence_confidence || 0.85) + ')]: ' + (primary.evidence || primary.raw_evidence.substring(0, 350)),\n  '🛡️ AUDIT VERDICT: ' + (validator.audit_pass || validator.approved ? 'APPROVED' : 'REJECTED') + (validator.audit_reason ? ' — ' + validator.audit_reason : ''),\n  '⚠️ KEY RISKS: ' + (Array.isArray(validator.key_risks) && validator.key_risks.length > 0 ? validator.key_risks.join(', ') : 'None flagged'),\n  '🆔 OPPORTUNITY ID: ' + (primary.opportunity_id || 'N/A') + (primary.is_existing_company_new_opp ? ' (New Opportunity for Existing Company)' : ''),\n  '📌 SOURCE: ' + (primary.source_type || 'Job Feed') + ' | ' + (primary.original_job_url || primary.source_url || primary.website || '')\n].join('\\n\\n');\n\n// 8. Build final payload matching verified Airtable field IDs + extended fields\nreturn {\n  json: {\n    YOUR_AIRTABLE_FIELD_ID: primary.company_name,                                      // Company Name (Primary)\n    YOUR_AIRTABLE_FIELD_ID: primary.industry || 'Professional Services',               // Industry\n    YOUR_AIRTABLE_FIELD_ID: primary.location || 'USA / UK / Remote',                   // Country / City\n    YOUR_AIRTABLE_FIELD_ID: sizeOption,                                                // Company Size (\"Solo\" | \"2-5\" | \"5-15\" | \"15-30\")\n    YOUR_AIRTABLE_FIELD_ID: dmDisplay,                                                 // Decision Maker\n    YOUR_AIRTABLE_FIELD_ID: 'Not Found',                                               // Email Status (\"Verified\" | \"Guessed\" | \"Not Found\")\n    YOUR_AIRTABLE_FIELD_ID: primary.website || primary.original_job_url || '',         // Website / Source URL\n    YOUR_AIRTABLE_FIELD_ID: whyFitStructured,                                          // Why Fit (Rich Structured Intelligence)\n    YOUR_AIRTABLE_FIELD_ID: primary.recommended_service || 'AI Workflow Automation',    // Recommended Service\n    YOUR_AIRTABLE_FIELD_ID: temp,                                                      // Temperature (\"Hot\" | \"Warm\" | \"Cold\")\n    YOUR_AIRTABLE_FIELD_ID: primary.outreach_subject || ('Automating operational workflows for ' + primary.company_name), // Outreach Subject\n    YOUR_AIRTABLE_FIELD_ID: primary.outreach_message || 'Hi, I noticed manual processes in your operations and would love to help automate them.', // Outreach Message\n    YOUR_AIRTABLE_FIELD_ID: 'New',                                                     // Status (\"New\")\n    YOUR_AIRTABLE_FIELD_ID: today,                                                     // Date Added (YYYY-MM-DD)\n    YOUR_AIRTABLE_FIELD_ID: finalScore,                                                // Lead Score (Integer)\n    \n    // Standalone Extended Fields\n    opportunity_id: primary.opportunity_id || '',\n    normalized_domain: primary.normalized_domain || '',\n    priority: priorityTier,\n    intent_score: finalIntentScore,\n    buying_intent: primary.buying_intent || 'UNKNOWN',\n    commercial_readiness: primary.commercial_readiness || 'UNKNOWN',\n    opportunity_type: primary.opportunity_type || 'AUTOMATION_PROJECT',\n    freshness_status: primary.freshness_status || 'RECENT',\n    signal_age_days: primary.signal_age_days || 0,\n    competition_level: primary.competition_level || 'MEDIUM',\n    outreach_status: isOutreachReady ? 'Ready' : 'Not Ready'\n  }\n};"
+      },
+      "id": "e2b19c0f-dda5-4a7a-8356-ce7de39c4fdf",
+      "name": "Format & Enrich Lead for CRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2576,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_BASE_ID"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_AIRTABLE_TABLE_ID"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "Automation Need": false
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Industry",
+              "displayName": "Industry",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Business Size",
+              "displayName": "Business Size",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Solo",
+                  "value": "Solo"
+                },
+                {
+                  "name": "2-5",
+                  "value": "2-5"
+                },
+                {
+                  "name": "5-15",
+                  "value": "5-15"
+                },
+                {
+                  "name": "15-30",
+                  "value": "15-30"
+                },
+                {
+                  "name": "30-50",
+                  "value": "30-50"
+                },
+                {
+                  "name": "50+",
+                  "value": "50+"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Decision Maker",
+              "displayName": "Decision Maker",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email ID",
+              "displayName": "Email ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "WhatsApp Number",
+              "displayName": "WhatsApp Number",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "LinkedIn URL",
+              "displayName": "LinkedIn URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Website URL",
+              "displayName": "Website URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Why Fit",
+              "displayName": "Why Fit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Recommended Service",
+              "displayName": "Recommended Service",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Target Fit",
+              "displayName": "Target Fit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IDEAL",
+                  "value": "IDEAL"
+                },
+                {
+                  "name": "GOOD",
+                  "value": "GOOD"
+                },
+                {
+                  "name": "BORDERLINE",
+                  "value": "BORDERLINE"
+                },
+                {
+                  "name": "REJECT",
+                  "value": "REJECT"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Need",
+              "displayName": "Automation Need",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Automation Opportunity",
+              "displayName": "Automation Opportunity",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Pain Signal",
+              "displayName": "Pain Signal",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Evidence",
+              "displayName": "Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Evidence Source",
+              "displayName": "Evidence Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Evidence Confidence",
+              "displayName": "Evidence Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source Type",
+              "displayName": "Source Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Arbeitnow",
+                  "value": "Arbeitnow"
+                },
+                {
+                  "name": "Jobicy",
+                  "value": "Jobicy"
+                },
+                {
+                  "name": "Company Website",
+                  "value": "Company Website"
+                },
+                {
+                  "name": "Careers Page",
+                  "value": "Careers Page"
+                },
+                {
+                  "name": "Other",
+                  "value": "Other"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source URL",
+              "displayName": "Source URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Original Job URL",
+              "displayName": "Original Job URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Signal Score",
+              "displayName": "Signal Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Qualification",
+              "displayName": "AI Qualification",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "Rejected"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Validation",
+              "displayName": "AI Validation",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Approved",
+                  "value": "Approved"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "Rejected"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Concerns",
+              "displayName": "AI Concerns",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Score Adjustment",
+              "displayName": "AI Score Adjustment",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Intent Score",
+              "displayName": "Intent Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Freshness Status",
+              "displayName": "Freshness Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "RECENT",
+                  "value": "RECENT"
+                },
+                {
+                  "name": "DORMANT",
+                  "value": "DORMANT"
+                },
+                {
+                  "name": "EXPIRED",
+                  "value": "EXPIRED"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Competition Level",
+              "displayName": "Competition Level",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "LOW",
+                  "value": "LOW"
+                },
+                {
+                  "name": "MEDIUM",
+                  "value": "MEDIUM"
+                },
+                {
+                  "name": "HIGH",
+                  "value": "HIGH"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Opportunity Type",
+              "displayName": "Opportunity Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "project",
+                  "value": "project"
+                },
+                {
+                  "name": "contract",
+                  "value": "contract"
+                },
+                {
+                  "name": "freelance",
+                  "value": "freelance"
+                },
+                {
+                  "name": "agency_partnership",
+                  "value": "agency_partnership"
+                },
+                {
+                  "name": "ongoing_retainer",
+                  "value": "ongoing_retainer"
+                },
+                {
+                  "name": "full_time",
+                  "value": "full_time"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Personalization Angle",
+              "displayName": "Personalization Angle",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Decision Maker Name",
+              "displayName": "Decision Maker Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Decision Maker Role",
+              "displayName": "Decision Maker Role",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Decision Maker Confidence",
+              "displayName": "Decision Maker Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Business Phone",
+              "displayName": "Business Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Outreach Status",
+              "displayName": "Outreach Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Not Ready",
+                  "value": "Not Ready"
+                },
+                {
+                  "name": "Ready",
+                  "value": "Ready"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Replied",
+                  "value": "Replied"
+                },
+                {
+                  "name": "Meeting",
+                  "value": "Meeting"
+                },
+                {
+                  "name": "Won",
+                  "value": "Won"
+                },
+                {
+                  "name": "Lost",
+                  "value": "Lost"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "AI Validation Reason",
+              "displayName": "AI Validation Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Temperature",
+              "displayName": "Temperature",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Hot",
+                  "value": "Hot"
+                },
+                {
+                  "name": "Warm",
+                  "value": "Warm"
+                },
+                {
+                  "name": "Cold",
+                  "value": "Cold"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Outreach Message",
+              "displayName": "Outreach Message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Replied",
+                  "value": "Replied"
+                },
+                {
+                  "name": "Meeting Booked",
+                  "value": "Meeting Booked"
+                },
+                {
+                  "name": "Closed",
+                  "value": "Closed"
+                },
+                {
+                  "name": "Not Interested",
+                  "value": "Not Interested"
+                },
+                {
+                  "name": "No Mail ID",
+                  "value": "No Mail ID"
+                },
+                {
+                  "name": "Connected",
+                  "value": "Connected"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "Rejected"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Date Added",
+              "displayName": "Date Added",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Contacted",
+              "displayName": "Last Contacted",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Follow Up Date",
+              "displayName": "Follow Up Date",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Follow Up Count",
+              "displayName": "Follow Up Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "77c3133a-cb51-4178-93c4-c5c384541420",
+      "name": "Save To RINDAX Leads CRM",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        2800,
+        688
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Airtable  Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            },
+            {
+              "triggerAtHour": 16
+            }
+          ]
+        }
+      },
+      "id": "737f0a29-2fc8-4602-b93c-35a5f051f103",
+      "name": "Schedule Daily 8 AM & 4 PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        928
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "https://remoteok.com/api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "7f966d3c-930e-474a-8a36-38e3776e52ca",
+      "name": "Fetch RemoteOK Free Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        304,
+        592
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const rawInput = item.json;\n  let text = '';\n  if (typeof rawInput.message?.content === 'string') {\n    text = rawInput.message.content;\n  } else if (typeof rawInput.text === 'string') {\n    text = rawInput.text;\n  } else if (rawInput.candidates?.[0]?.content?.parts?.[0]?.text) {\n    text = rawInput.candidates[0].content.parts[0].text;\n  } else if (typeof rawInput === 'object') {\n    text = JSON.stringify(rawInput);\n  }\n\n  let cleanJsonText = text.trim();\n  if (cleanJsonText.startsWith('```json')) {\n    cleanJsonText = cleanJsonText.replace(/^```json\\s*/i, '').replace(/```\\s*$/, '').trim();\n  } else if (cleanJsonText.startsWith('```')) {\n    cleanJsonText = cleanJsonText.replace(/^```\\s*/i, '').replace(/```\\s*$/, '').trim();\n  }\n\n  let parsed = null;\n  let parseStatus = 'SUCCESS';\n\n  try {\n    parsed = JSON.parse(cleanJsonText);\n  } catch (e) {\n    try {\n      const repaired = cleanJsonText.replace(/,\\s*([\\}\\]])/g, '$1');\n      parsed = JSON.parse(repaired);\n    } catch (e2) {\n      parseStatus = 'FAILED';\n      parsed = {\n        qualified: false,\n        lead_score: 0,\n        intent_score: 0,\n        target_fit: 'REJECT',\n        buying_intent: 'UNKNOWN',\n        commercial_readiness: 'UNKNOWN',\n        rejection_reason: 'AI output produced malformed/unparseable JSON'\n      };\n    }\n  }\n\n  const enrichedLead = {\n    ...rawInput,\n    ai_parse_status: parseStatus,\n    qualified: Boolean(parsed.qualified),\n    lead_score: typeof parsed.lead_score === 'number' ? parsed.lead_score : 0,\n    intent_score: typeof parsed.intent_score === 'number' ? parsed.intent_score : 0,\n    priority: parsed.priority || 'REJECT',\n    target_fit: parsed.target_fit || 'REJECT',\n    buying_intent: parsed.buying_intent || 'UNKNOWN',\n    commercial_readiness: parsed.commercial_readiness || 'UNKNOWN',\n    opportunity_type: parsed.opportunity_type || 'UNKNOWN',\n    freshness_status: parsed.freshness_status || rawInput.freshness_status || 'RECENT',\n    competition_level: parsed.competition_level || 'MEDIUM',\n    business_fit: Boolean(parsed.business_fit),\n    automation_need: Boolean(parsed.automation_need),\n    commercial_potential: Boolean(parsed.commercial_potential),\n    evidence_strength: typeof parsed.evidence_strength === 'number' ? parsed.evidence_strength : 0,\n    industry: parsed.industry || 'Professional Services',\n    company_size: parsed.company_size || '5-15',\n    pain_signal: parsed.pain_signal || '',\n    evidence: Array.isArray(parsed.evidence) ? parsed.evidence.join(' | ') : (parsed.evidence || ''),\n    evidence_type: parsed.evidence_type || 'Factual Paraphrase',\n    evidence_confidence: typeof parsed.evidence_confidence === 'number' ? parsed.evidence_confidence : 0.8,\n    automation_opportunity: parsed.automation_opportunity || '',\n    automation_opportunity_confidence: typeof parsed.automation_opportunity_confidence === 'number' ? parsed.automation_opportunity_confidence : 0.8,\n    recommended_service: parsed.recommended_service || 'AI Workflow Automation',\n    why_fit: parsed.why_fit || '',\n    personalization_angle: parsed.personalization_angle || '',\n    decision_maker_name: parsed.decision_maker_name || '',\n    decision_maker_role: parsed.decision_maker_role || '',\n    decision_maker_confidence: typeof parsed.decision_maker_confidence === 'number' ? parsed.decision_maker_confidence : 0,\n    outreach_subject: parsed.outreach_subject || '',\n    outreach_message: parsed.outreach_message || '',\n    rejection_reason: parsed.rejection_reason || null\n  };\n\n  results.push({ json: enrichedLead });\n}\n\nreturn results;"
+      },
+      "id": "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Parse & Validate Primary AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "mode": "list",
+          "__rl": true,
+          "value": "models/gemini-2.5-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Company: {{ $json.company_name }}\nRole Title: {{ $json.raw_job_title }}\nLocation: {{ $json.location }}\nDomain: {{ $json.normalized_domain }}\nPre-AI Signal Score: {{ $json.signal_score }}\nDetected Signal Groups: {{ $json.detected_signal_groups }}\nContextual Phrases: {{ $json.matched_contextual_phrases }}\n\nOperational Evidence:\n{{ $json.raw_evidence }}\n\nEvaluate this lead thoroughly against RINDAX criteria and return strictly valid JSON."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are the Lead Qualification Director for RINDAX, an AI Automation & Data Analytics Agency.\nRINDAX builds business automations using n8n workflows, AI agents/chatbots, Power BI dashboards, advanced Excel models, CRM automations, and multi-app API integrations.\n\nYOUR MISSION:\nIdentify if there is CREDIBLE, FACTUAL EVIDENCE that this business has a repetitive, manual operational process that RINDAX can automate.\nWe prioritize QUALITY > QUANTITY.\n\nRULES FOR REASONING & EVIDENCE:\n1. STRICTLY DISTINGUISH:\n   - FACTS: What the source text explicitly says.\n   - INFERENCES: Logical conclusions drawn from facts.\n   - ASSUMPTIONS: Unverified guesses. Never state assumptions as facts or evidence.\n2. DISTINGUISH BUSINESS PAIN FROM BUYING INTENT:\n   - Having an operational problem is PAIN.\n   - Actively seeking, budgeting, or hiring for a solution is BUYING INTENT.\n3. BUYING INTENT CLASSIFICATION:\n   - \"VERY_HIGH\": Explicitly asking for automation help, hiring automation developer/contractor, requesting quotes/proposals.\n   - \"HIGH\": Clear current project, active implementation requirement, urgent bottleneck.\n   - \"MEDIUM\": Clear current pain, strong interest in automation, likely future project.\n   - \"LOW\": General business interest, weak problem signal, no evidence of current action.\n   - \"NONE\" | \"UNKNOWN\": Informational content or insufficient evidence.\n4. COMMERCIAL READINESS:\n   - \"READY_TO_BUY\" | \"LIKELY_TO_BUY\" | \"EARLY_RESEARCH\" | \"PAIN_ONLY\" | \"NO_COMMERCIAL_SIGNAL\" | \"UNKNOWN\"\n5. OPPORTUNITY TYPE:\n   - \"ACTIVE_HIRING\" | \"FREELANCE_PROJECT\" | \"CONTRACT_PROJECT\" | \"AUTOMATION_PROJECT\" | \"IMPLEMENTATION_REQUEST\" | \"SERVICE_REQUEST\" | \"VENDOR_SEARCH\" | \"CONSULTING_REQUEST\" | \"PROCESS_AUTOMATION_PAIN\" | \"TECHNOLOGY_SEARCH\" | \"GENERAL_BUSINESS_PAIN\" | \"UNKNOWN\"\n6. INTENT SCORE (0–25):\n   - Standalone score. Explicit stated intent = 20–25; hiring for manual work = 14–19; general usage = 8–13; vague = 0–7.\n7. TARGET FIT & COMPANY SIZE (SMALL-BUSINESS FOCUS):\n   - Prioritize genuine small businesses and small/medium teams (Solo, 2-5, 5-15, 15-30, 30-50).\n   - Size check applies strictly to the LEAD'S OWN COMPANY, not clients or tools they mention.\n   - Companies with company_size \"50+\" must be marked target_fit = \"REJECT\" unless explicit factual evidence shows the specific ops/hiring team itself is small.\n   - Default to REJECT on ambiguous large enterprises.\n8. AUTOMATION OPPORTUNITY:\n   - Must specify: \"Trigger → Processing → Destination/Action → Business Benefit\"\n   - Assign automation_opportunity_confidence (0.0 to 1.0).\n\n100-POINT SCORING RUBRIC:\n- Business Fit (0-15): Small business / small agile team fit.\n- Automation Need (0-25): Presence of repetitive manual workflows.\n- Evidence Strength (0-20): Factual quotes/paraphrases in description text.\n- Commercial Potential (0-15): Ability to pay for automation services.\n- Operational Complexity (0-10): Disconnected tools, spreadsheets, CRM.\n- Decision-Maker / Reachability (0-10): Reachability of founder/ops head.\n- Personalization Potential (0-5): Specific angle for outreach.\nTOTAL = 100\n\nMANDATORY GATES:\n- qualified = true\n- target_fit != \"REJECT\"\n- automation_need = true\n- commercial_potential = true\n- lead_score >= 70\n- evidence_strength >= 12\n- At least one concrete automation workflow required.\n\nREQUIRED OUTPUT JSON:\n{\n  \"qualified\": boolean,\n  \"lead_score\": number,\n  \"intent_score\": number,\n  \"priority\": \"Hot\" | \"Warm\" | \"Cold\" | \"REJECT\",\n  \"target_fit\": \"IDEAL\" | \"GOOD\" | \"BORDERLINE\" | \"REJECT\",\n  \"buying_intent\": \"VERY_HIGH\" | \"HIGH\" | \"MEDIUM\" | \"LOW\" | \"NONE\" | \"UNKNOWN\",\n  \"commercial_readiness\": \"READY_TO_BUY\" | \"LIKELY_TO_BUY\" | \"EARLY_RESEARCH\" | \"PAIN_ONLY\" | \"NO_COMMERCIAL_SIGNAL\" | \"UNKNOWN\",\n  \"opportunity_type\": \"ACTIVE_HIRING\" | \"FREELANCE_PROJECT\" | \"CONTRACT_PROJECT\" | \"AUTOMATION_PROJECT\" | \"IMPLEMENTATION_REQUEST\" | \"SERVICE_REQUEST\" | \"VENDOR_SEARCH\" | \"CONSULTING_REQUEST\" | \"PROCESS_AUTOMATION_PAIN\" | \"TECHNOLOGY_SEARCH\" | \"GENERAL_BUSINESS_PAIN\" | \"UNKNOWN\",\n  \"freshness_status\": \"VERY_FRESH\" | \"FRESH\" | \"AGING\" | \"STALE\" | \"UNKNOWN\",\n  \"competition_level\": \"LOW\" | \"MEDIUM\" | \"HIGH\",\n  \"business_fit\": boolean,\n  \"automation_need\": boolean,\n  \"commercial_potential\": boolean,\n  \"evidence_strength\": number,\n  \"industry\": string,\n  \"company_size\": \"Solo\" | \"2-5\" | \"5-15\" | \"15-30\" | \"30-50\" | \"50+\",\n  \"pain_signal\": string,\n  \"evidence\": string,\n  \"evidence_type\": \"Direct Quote\" | \"Factual Paraphrase\" | \"Derived Signal\",\n  \"evidence_confidence\": number,\n  \"automation_opportunity\": string,\n  \"automation_opportunity_confidence\": number,\n  \"recommended_service\": \"AI Workflow Automation\" | \"Business Process Automation\" | \"AI Agent Development\" | \"CRM Automation\" | \"Power BI Dashboard\" | \"Excel Automation & Business Reporting\",\n  \"why_fit\": string,\n  \"personalization_angle\": string,\n  \"decision_maker_name\": string,\n  \"decision_maker_role\": string,\n  \"decision_maker_confidence\": number,\n  \"outreach_subject\": string,\n  \"outreach_message\": string,\n  \"rejection_reason\": string | null\n}"
+        }
+      },
+      "id": "aa937019-2ef5-43c6-9cbc-ef50a961423f",
+      "name": "Primary Gemini AI Qualification",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        688
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search_by_date?query=%22need+automation%22+OR+%22automate+this+process%22&tags=(comment,story)&hitsPerPage=50",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "157e0e80-3c29-45e0-88a9-9e83cc34cc3a",
+      "name": "Fetch HN Automation Pain Signals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        304,
+        784
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search_by_date?query=%22still+using+spreadsheets%22+OR+%22manually+update%22&tags=(comment,story)&hitsPerPage=50",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "cda33874-b2c3-4da0-9390-7caa4b612c0f",
+      "name": "Fetch HN Manual Process Signals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        304,
+        976
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    }
   ],
   "connections": {
-    "Manual Trigger": {"main": [[{"node": "Fetch Arbeitnow Free API"}, {"node": "Fetch Jobicy Free API"}, {"node": "Fetch RemoteOK Free Feed"}, {"node": "Fetch HN Automation Pain Signals"}, {"node": "Fetch HN Manual Process Signals"}]]},
-    "Schedule Daily 8 AM & 4 PM": {"main": [[{"node": "Fetch Arbeitnow Free API"}, {"node": "Fetch Jobicy Free API"}, {"node": "Fetch RemoteOK Free Feed"}, {"node": "Fetch HN Automation Pain Signals"}, {"node": "Fetch HN Manual Process Signals"}]]},
-    "Fetch Arbeitnow Free API": {"main": [[{"node": "Combine Feeds"}]]},
-    "Fetch Jobicy Free API": {"main": [[{"node": "Combine Feeds"}]]},
-    "Fetch RemoteOK Free Feed": {"main": [[{"node": "Combine Feeds"}]]},
-    "Fetch HN Automation Pain Signals": {"main": [[{"node": "Combine Feeds"}]]},
-    "Fetch HN Manual Process Signals": {"main": [[{"node": "Combine Feeds"}]]},
-    "Combine Feeds": {"main": [[{"node": "Normalize & Signal Scoring"}]]},
-    "Normalize & Signal Scoring": {"main": [[{"node": "Fetch Existing CRM Leads"}, {"node": "Filter Duplicates & Enterprises"}]]},
-    "Filter Duplicates & Enterprises": {"main": [[{"node": "Primary Gemini AI Qualification"}]]},
-    "Primary Gemini AI Qualification": {"main": [[{"node": "Parse & Validate Primary AI JSON"}]]},
-    "Parse & Validate Primary AI JSON": {"main": [[{"node": "Check Qualification Gate"}]]},
-    "Check Qualification Gate": {"main": [[{"node": "Skeptical AI Validator"}]]},
-    "Skeptical AI Validator": {"main": [[{"node": "Check Validation Gate"}]]},
-    "Check Validation Gate": {"main": [[{"node": "Format & Enrich Lead for CRM"}]]},
-    "Format & Enrich Lead for CRM": {"main": [[{"node": "Save To RINDAX Leads CRM"}]]}
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Arbeitnow Free API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Jobicy Free API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch RemoteOK Free Feed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HN Automation Pain Signals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HN Manual Process Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Arbeitnow Free API": {
+      "main": [
+        [
+          {
+            "node": "Combine Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Feeds": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Signal Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jobicy Free API": {
+      "main": [
+        [
+          {
+            "node": "Combine Feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Check Qualification Gate": {
+      "main": [
+        [
+          {
+            "node": "Skeptical AI Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skeptical AI Validator": {
+      "main": [
+        [
+          {
+            "node": "Check Validation Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Signal Scoring": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing CRM Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Duplicates & Enterprises",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation Gate": {
+      "main": [
+        [
+          {
+            "node": "Format & Enrich Lead for CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format & Enrich Lead for CRM": {
+      "main": [
+        [
+          {
+            "node": "Save To RINDAX Leads CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Daily 8 AM & 4 PM": {
+      "main": [
+        [
+          {
+            "node": "Fetch Arbeitnow Free API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Jobicy Free API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch RemoteOK Free Feed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HN Automation Pain Signals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HN Manual Process Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RemoteOK Free Feed": {
+      "main": [
+        [
+          {
+            "node": "Combine Feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates & Enterprises": {
+      "main": [
+        [
+          {
+            "node": "Primary Gemini AI Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Primary Gemini AI Qualification": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Primary AI JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Primary AI JSON": {
+      "main": [
+        [
+          {
+            "node": "Check Qualification Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HN Automation Pain Signals": {
+      "main": [
+        [
+          {
+            "node": "Combine Feeds",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Fetch HN Manual Process Signals": {
+      "main": [
+        [
+          {
+            "node": "Combine Feeds",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    }
   },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "Google Gemini (dual-stage)", "Airtable"],
-    "setup_notes": "Requires: a Google Gemini API credential and an Airtable credential. The 5 fetch nodes hit public, free, no-auth APIs. Replace all YOUR_* placeholders before use."
+    "templateCredsSetupCompleted": false
   }
 }

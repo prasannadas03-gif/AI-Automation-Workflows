@@ -1,36 +1,389 @@
 {
   "name": "Multi-Tenant WhatsApp AI Agent",
-  "description": "One reusable WhatsApp support agent deployable per client. Resolves which business owns the inbound number, loads that client's own knowledge text and system prompt from Supabase, answers strictly from it via Claude with per-conversation memory, and replies on WhatsApp \u2014 never inventing details outside the client's knowledge doc.",
   "nodes": [
-    {"name": "WhatsApp Message Received", "type": "n8n-nodes-base.whatsAppTrigger", "notes": "Requires a WhatsApp Business Cloud API credential", "parameters": {"updates": ["messages"]}},
-    {"name": "Normalize Input", "type": "n8n-nodes-base.set", "notes": "Extracts waId, messageText, contactName, phoneNumberId from the inbound webhook payload"},
     {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "id": "8630846f-318f-4090-be0b-023230e4408c",
+      "name": "WhatsApp Message Received",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "WhatsApp OAuth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "waId",
+              "value": "={{ $json.messages?.[0]?.from ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "messageText",
+              "value": "={{ $json.messages?.[0]?.text?.body ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "contactName",
+              "value": "={{ $json.contacts?.[0]?.profile?.name ?? \"Customer\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "phoneNumberId",
+              "value": "={{ $json.metadata?.phone_number_id ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "10067420-5969-4990-8264-31812fe52afb",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "e56fe319-126a-4ef4-b2f2-5a62f1f27586",
+      "name": "Skip Non-Message Events",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        336,
+        208
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.messageText }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              }
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "clients",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "phone_number_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.phoneNumberId }}"
+            }
+          ]
+        }
+      },
+      "id": "17157280-3ce1-4ef5-9be1-86603c405ffe",
       "name": "Lookup Client by Phone Number",
       "type": "n8n-nodes-base.supabase",
-      "notes": "Requires a Supabase credential. Expects a 'clients' table with columns: phone_number_id, business_name, system_prompt, knowledge_doc",
-      "parameters": {"operation": "getAll", "tableId": "clients", "filters": {"conditions": [{"keyName": "phone_number_id", "condition": "eq", "keyValue": "={{ $json.phoneNumberId }}"}]}}
+      "typeVersion": 1,
+      "position": [
+        448,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
     },
-    {"name": "Build Session Context", "type": "n8n-nodes-base.set", "notes": "Builds a per-client, per-contact sessionKey ({clientId}_{waId}) for conversation memory"},
     {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "waId",
+              "value": "={{ $('Normalize Input').item.json.waId }}",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "messageText",
+              "value": "={{ $('Normalize Input').item.json.messageText }}",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "contactName",
+              "value": "={{ $('Normalize Input').item.json.contactName }}",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "phoneNumberId",
+              "value": "={{ $json.phone_number_id }}",
+              "type": "string"
+            },
+            {
+              "id": "b5",
+              "name": "clientId",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "b6",
+              "name": "businessName",
+              "value": "={{ $json.business_name }}",
+              "type": "string"
+            },
+            {
+              "id": "b7",
+              "name": "systemPrompt",
+              "value": "={{ $json.system_prompt }}",
+              "type": "string"
+            },
+            {
+              "id": "b8",
+              "name": "sessionKey",
+              "value": "={{ $json.id }}_{{ $('Normalize Input').item.json.waId }}",
+              "type": "string"
+            },
+            {
+              "id": "b9",
+              "name": "knowledgeDoc",
+              "value": "={{ $json.knowledge_doc ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "68e2e750-ae9b-40ff-90ca-47de00389304",
+      "name": "Build Session Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messageText }}",
+        "options": {
+          "systemMessage": "={{ $json.systemPrompt }}\n\nYou are the WhatsApp support assistant for {{ $json.businessName }}. Use the following business knowledge to answer customer questions about products, pricing, policies, hours, or services:\n\n{{ $json.knowledgeDoc }}\n\nIf the answer isn't covered in the information above, say so honestly and offer to connect the customer with a human team member — never invent details. Keep replies short and WhatsApp-friendly: plain text, no markdown headers, no long paragraphs."
+        }
+      },
+      "id": "8f90215b-71e5-4efb-8149-51d66c619ccd",
       "name": "WhatsApp Support Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "notes": "System prompt is built from the client's own system_prompt + knowledgeDoc. Instructed to say so honestly and offer human handoff if the answer isn't covered, never invent details, and keep replies short/plain-text for WhatsApp"
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
     },
-    {"name": "Claude Haiku Model", "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic", "notes": "Requires an Anthropic API credential", "parameters": {"model": "claude-haiku-4-5", "options": {"maxTokensToSample": 1024, "temperature": 0.4}}},
-    {"name": "Conversation Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow", "parameters": {"sessionIdType": "customKey", "contextWindowLength": 10}},
-    {"name": "Send WhatsApp Reply", "type": "n8n-nodes-base.whatsApp", "parameters": {"operation": "send"}}
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Build Session Context').item.json.sessionKey }}",
+        "contextWindowLength": 10
+      },
+      "id": "5f08fb0e-1395-4c9e-8b14-e7dcc33aae71",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        1032,
+        440
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        904,
+        440
+      ],
+      "id": "422d9f99-3eea-4fd0-a16f-9c9c6ccdb26b",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "={{ $('Build Session Context').item.json.phoneNumberId }}",
+        "recipientPhoneNumber": "={{ $('Build Session Context').item.json.waId }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "2d668519-d628-4c19-861b-a9265b05641e",
+      "name": "Send WhatsApp Reply",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "whatsAppApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "WhatsApp account"
+        }
+      }
+    }
   ],
   "connections": {
-    "WhatsApp Message Received": {"main": [[{"node": "Normalize Input"}]]},
-    "Normalize Input": {"main": [[{"node": "Lookup Client by Phone Number"}]]},
-    "Lookup Client by Phone Number": {"main": [[{"node": "Build Session Context"}]]},
-    "Build Session Context": {"main": [[{"node": "WhatsApp Support Agent"}]]},
-    "WhatsApp Support Agent": {"main": [[{"node": "Send WhatsApp Reply"}]]}
+    "WhatsApp Message Received": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Skip Non-Message Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Non-Message Events": {
+      "main": [
+        [
+          {
+            "node": "Lookup Client by Phone Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Client by Phone Number": {
+      "main": [
+        [
+          {
+            "node": "Build Session Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Session Context": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "WhatsApp Support Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "WhatsApp Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Support Agent": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "WhatsApp Cloud API", "Supabase", "Claude Haiku 4.5"],
-    "setup_notes": "Requires: a WhatsApp Business Cloud API credential, a Supabase credential with a 'clients' table (phone_number_id, business_name, system_prompt, knowledge_doc), and an Anthropic API credential. Each row in 'clients' is one tenant \u2014 add a new row to onboard a new business, no workflow changes needed. Replace all YOUR_* placeholders before use."
+    "templateCredsSetupCompleted": false
   }
 }

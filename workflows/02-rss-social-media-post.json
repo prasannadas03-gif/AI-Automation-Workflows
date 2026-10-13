@@ -1,154 +1,464 @@
 {
-  "name": "RSS Feed → Social Media Pipeline",
-  "description": "Monitors the RINDAX blog RSS feed and auto-publishes new articles to LinkedIn, Facebook, and Instagram with Claude AI-generated captions. Zero manual input required.",
+  "name": "RSS Social Media Post",
   "nodes": [
     {
-      "name": "RSS Feed Trigger",
-      "type": "n8n-nodes-base.rssFeedReadTrigger",
-      "notes": "Polls blog RSS feed at 9:30 AM and 6 PM. Fires only when a new article is detected.",
-      "parameters": {
-        "pollTimes": {"item": [{"hour": 9, "minute": 30}, {"hour": 18}]},
-        "feedUrl": "YOUR_BLOG_RSS_FEED_URL"
-      }
-    },
-    {
-      "name": "HTML Parser — Extract Featured Image",
-      "type": "n8n-nodes-base.html",
-      "notes": "Extracts featured image URL from blog post HTML content",
-      "parameters": {
-        "operation": "extractHtmlContent",
-        "dataPropertyName": "content:encoded",
-        "extractionValues": {
-          "values": [{
-            "key": "extracted_image",
-            "cssSelector": "img",
-            "returnValue": "attribute",
-            "attribute": "src"
-          }]
-        }
-      }
-    },
-    {
-      "name": "Claude AI — Generate Captions",
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "notes": "Claude Sonnet generates unique captions for each platform based on article title and content",
-      "parameters": {
-        "promptType": "define",
-        "text": "Generate unique social media captions for LinkedIn, Facebook, and Instagram based on the blog post. Return JSON with keys: linkedin_post, facebook_post, instagram_caption."
-      }
-    },
-    {
-      "name": "OpenRouter Chat Model (Claude Sonnet)",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
-      "parameters": {
-        "model": "anthropic/claude-sonnet-4-6",
-        "options": {"maxTokens": 1200},
-        "credentials": "YOUR_OPENROUTER_API_KEY"
-      }
-    },
-    {
-      "name": "Facebook Post",
-      "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "method": "POST",
         "url": "https://graph.facebook.com/v25.0/YOUR_FACEBOOK_PAGE_ID/photos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            {"name": "message", "value": "={{ JSON.parse($json.text).facebook_post }}"},
-            {"name": "url", "value": "={{ $('HTML Parser — Extract Featured Image').item.json.extracted_image }}"},
-            {"name": "access_token", "value": "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN"}
+            {
+              "name": "message",
+              "value": "={{ JSON.parse($json.text).facebook_post }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $('HTML').item.json.extracted_image }}"
+            }
           ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1312,
+        0
+      ],
+      "id": "aaa7721b-7830-4d1e-a9f9-cd6640a7afac",
+      "name": "Facebook Post",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
         }
       }
     },
     {
-      "name": "Facebook Comment (Blog Link)",
-      "type": "n8n-nodes-base.httpRequest",
       "parameters": {
-        "method": "POST",
-        "url": "https://graph.facebook.com/v25.0/YOUR_FACEBOOK_POST_ID/comments",
-        "bodyParameters": {
-          "parameters": [
-            {"name": "message", "value": "Read the full article 👇\n={{ $('RSS Feed Trigger').item.json.link }}"},
-            {"name": "access_token", "value": "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN"}
-          ]
+        "url": "={{ $('HTML').item.json.extracted_image }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
         }
-      }
-    },
-    {
-      "name": "Download Blog Image for LinkedIn",
+      },
       "type": "n8n-nodes-base.httpRequest",
-      "parameters": {
-        "url": "={{ $('HTML Parser — Extract Featured Image').item.json.extracted_image }}",
-        "options": {"response": {"response": {"responseFormat": "file"}}}
-      }
+      "typeVersion": 4.4,
+      "position": [
+        1312,
+        -288
+      ],
+      "id": "cf5c2116-162a-4e61-9cb0-8834f5a9a61b",
+      "name": "Linkedin Image",
+      "retryOnFail": true
     },
     {
-      "name": "LinkedIn Post",
-      "type": "n8n-nodes-base.linkedIn",
       "parameters": {
         "person": "YOUR_LINKEDIN_PERSON_ID",
         "text": "={{ JSON.parse($json.text).linkedin_post }}",
         "shareMediaCategory": "IMAGE",
-        "credentials": "YOUR_LINKEDIN_OAUTH_CREDENTIALS"
+        "binaryPropertyName": "=data",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        -288
+      ],
+      "id": "c331ba88-bfec-4817-9863-3a2b9c2c5c32",
+      "name": "Linkedin",
+      "retryOnFail": true,
+      "credentials": {
+        "linkedInOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "LinkedIn account"
+        }
       }
     },
     {
-      "name": "Instagram — Create Media Container",
-      "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "method": "POST",
         "url": "https://graph.facebook.com/v25.0/YOUR_INSTAGRAM_ACCOUNT_ID/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
         "bodyParameters": {
           "parameters": [
-            {"name": "caption", "value": "={{ JSON.parse($json.text).instagram_caption }}"},
-            {"name": "image_url", "value": "={{ $('HTML Parser — Extract Featured Image').item.json.extracted_image }}"},
-            {"name": "access_token", "value": "YOUR_INSTAGRAM_ACCESS_TOKEN"}
+            {
+              "name": "caption",
+              "value": "={{ JSON.parse($json.text).instagram_caption }}"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $('HTML').item.json.extracted_image }}"
+            }
           ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1312,
+        -480
+      ],
+      "id": "27425b48-ab89-42a0-a6e2-61a7d5920a8f",
+      "name": "Instagram",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
         }
       }
     },
     {
-      "name": "Instagram — Publish",
-      "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "method": "POST",
         "url": "https://graph.facebook.com/v25.0/YOUR_INSTAGRAM_ACCOUNT_ID/media_publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {"name": "creation_id", "value": "={{ $json.id }}"},
-            {"name": "access_token", "value": "YOUR_INSTAGRAM_ACCESS_TOKEN"}
+            {
+              "name": "creation_id",
+              "value": "={{ $json.id }}"
+            }
           ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1536,
+        -480
+      ],
+      "id": "73d2ad9f-010d-4db5-8cf0-e187ee1ce092",
+      "name": "Instagram Post",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
         }
       }
     },
     {
-      "name": "Instagram Comment (Blog Link)",
-      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a professional social media copywriter for YOUR BRAND.\n\nYour job is to create engaging, human-sounding social media content that increases brand awareness, engagement, credibility, and clicks.\n\nCRITICAL:\n\nUse Blog Content as the primary source for all post creation.Do not rely on the Blog Title for the main hook.\n\nIf the article discusses AI, customer support, automation, business, marketing, technology, finance, healthcare, or any other topic, all generated posts must remain strictly related to that topic.\n\nNever generate content about unrelated subjects.\n\nINPUTS\n\nBlog Title:\n{{ $('RSS Feed Trigger').item.json.title }}\n\n\nBlog URL:\n{{ $('RSS Feed Trigger').item.json.link }}\n\nBlog Image:\n{{ $json.extracted_image }}\n\n\nGENERAL RULES\n\n1. Create original human-written content.\n2. Never copy the blog title as the opening line.\n3.Do not start any post with the blog title,Do not copy the blog title as the caption,\n4. Create curiosity without summarizing the entire article.\n5. Write naturally, like an experienced social media manager.\n6. Avoid generic AI-style phrases.\n7. Maximum 40 words before any CTA or link.\n8. Do not use bullet points.\n9. Do not use headings.\n10. Do not use emojis except for the Instagram CTA sentence.\n11. Do not use em dashes (—).\n12. Every platform must have a unique caption.\n13. Always include exactly 5 hashtags.\n14. Always include #YourBrand.\n15. Add 4 additional hashtags relevant to the article topic and platform.\n16. Hashtags must always be the final line.\n17. Never place hashtags inside the caption text.\n18. Never mention \"Read this blog\" more than once.\n19. Never invent or modify URLs.\n20. Use the Google Sheets URL only when required by the platform rules.\n\nCONTENT CREATION RULES\n\n1. Do not start any post with the blog title.\n2. Create an original 1-2 sentence hook inspired by the blog content.\n3. The hook should make readers curious enough to click.\n4. Do not reveal the full answer or summarize the article.\n5. The hook should feel written by a real person.\n6. Avoid clickbait and exaggerated claims.\n7. Focus on insight, curiosity, business value, trends, or practical relevance.\n\nLINKEDIN POST\n\nPurpose:\nProfessional engagement and thought leadership.\n\nStructure:\n\n[2-line professional insight]\n\nRead the full article below.\n\n[Exact Blog URL from Google Sheets]\n\n[5 hashtags]\n\nRequirements:\n\n* Create a thoughtful, professional hook.\n* Focus on business value, trends, strategy, innovation, growth, or industry insight.\n* Include the exact Blog URL from Google Sheets.\n* Hashtags must be the final line.\n\nFACEBOOK POST\n\nPurpose:\nEngagement and curiosity.\n\nStructure:\n\n[1-2 sentence curiosity-driven caption]\n\nRead the full article here 👇\n\n{{ $('RSS Feed Trigger').item.json.link }}\n\n[5 hashtags]\n\nRequirements:\n\n* Use the exact Blog URL provided in the structure block.\n* Focus on making people curious enough to click the link in the caption.\n* Hashtags must be the final line.\n\nINSTAGRAM CAPTION\n\nPurpose:\nAttention and profile visits.\n\nStructure:\n\n[1-2 sentence curiosity-driven caption]\n\n👉 Tap the link in our bio to explore the full guide on our blog.\n\n[5 hashtags]\n\nRequirements:\n\n* Do NOT print the Blog URL.\n* Do NOT use the blog title.\n* Keep the caption short and easy to read.\n* Hashtags must appear below the CTA sentence.\n* Hashtags must be the final line.\n\nHASHTAG RULES\n\n1. Always include #YourBrand.\n2. Use exactly 4 additional relevant hashtags.\n3. Choose hashtags based on the article topic and platform.\n4. Do not use identical hashtag sets across all platforms.\n5. Keep hashtags professional and relevant.\n\nOUTPUT FORMAT\n\nReturn ONLY valid JSON.\n\n{\n\"linkedin_post\": \"\",\n\"facebook_post\": \"\",\n\"instagram_caption\": \"\"\n}\n\nIMPORTANT\n\n* Return only a JSON object.\n* Do not use markdown.\n* Do not wrap the JSON in code blocks.\n* Do not include explanations.\n* Do not include additional text outside the JSON.\n* Ensure every platform follows its required structure exactly.\n* Ensure hashtags are always the final line.\n* Ensure LinkedIn uses the exact Blog URL from Google Sheets.\n* Ensure Facebook does not print the URL.\n* Ensure Instagram does not print the URL.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        960,
+        -288
+      ],
+      "id": "a648bef3-083b-4781-8cd4-c2e997705057",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-haiku-4-5",
+        "options": {
+          "maxTokens": 1200
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -64
+      ],
+      "id": "67027c1c-dbc6-49c9-ae49-6c2da759c413",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 30
+            },
+            {
+              "hour": 18
+            }
+          ]
+        },
+        "feedUrl": "https://YOUR_BLOG_DOMAIN/feed/"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -288
+      ],
+      "id": "e902343a-3d21-4822-99e2-55f349f0d791",
+      "name": "RSS Feed Trigger",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "dataPropertyName": "content:encoded",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "extracted_image",
+              "cssSelector": "img",
+              "returnValue": "attribute",
+              "attribute": "src"
+            }
+          ]
+        },
+        "options": {
+          "trimValues": true
+        }
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        736,
+        -288
+      ],
+      "id": "c55f9e95-54fb-4122-be02-e85f6018c7f6",
+      "name": "HTML",
+      "retryOnFail": true
+    },
+    {
       "parameters": {
         "method": "POST",
-        "url": "https://graph.facebook.com/v25.0/YOUR_INSTAGRAM_POST_ID/comments",
+        "url": "=https://graph.facebook.com/v25.0/{{ $json.id }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            {"name": "message", "value": "={{ $('RSS Feed Trigger').item.json.link }}"},
-            {"name": "access_token", "value": "YOUR_INSTAGRAM_ACCESS_TOKEN"}
+            {
+              "name": "message",
+              "value": "={{ $('RSS Feed Trigger').item.json.link }}"
+            }
           ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1760,
+        -480
+      ],
+      "id": "f2c2b644-8e4e-4c31-9e10-ce6a40dec894",
+      "name": "Comment",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/{{ $json.post_id }}/comments\n",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "=Read the full article and deep dive on our blog here 👇\n\n{{ $('RSS Feed Trigger').item.json.link }}\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1536,
+        -96
+      ],
+      "id": "3a0efb40-8734-42d9-b14a-ce3ff78d340a",
+      "name": "FB Comment",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/{{ $json.post_id }}/likes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1536,
+        96
+      ],
+      "id": "1c2b031c-3b9f-4b0c-bca7-35d05dca6bf2",
+      "name": "FB Like",
+      "retryOnFail": true,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Facebook Graph API Token"
         }
       }
     }
   ],
   "connections": {
-    "RSS Feed Trigger": {"main": [[{"node": "HTML Parser — Extract Featured Image"}]]},
-    "HTML Parser — Extract Featured Image": {"main": [[{"node": "Claude AI — Generate Captions"}]]},
-    "Claude AI — Generate Captions": {"main": [[{"node": "Facebook Post"}, {"node": "Download Blog Image for LinkedIn"}, {"node": "Instagram — Create Media Container"}]]},
-    "Facebook Post": {"main": [[{"node": "Facebook Comment (Blog Link)"}]]},
-    "Download Blog Image for LinkedIn": {"main": [[{"node": "LinkedIn Post"}]]},
-    "Instagram — Create Media Container": {"main": [[{"node": "Instagram — Publish"}]]},
-    "Instagram — Publish": {"main": [[{"node": "Instagram Comment (Blog Link)"}]]}
+    "Facebook Post": {
+      "main": [
+        [
+          {
+            "node": "FB Comment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "FB Like",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linkedin Image": {
+      "main": [
+        [
+          {
+            "node": "Linkedin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linkedin": {
+      "main": [
+        []
+      ]
+    },
+    "Instagram": {
+      "main": [
+        [
+          {
+            "node": "Instagram Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Post": {
+      "main": [
+        [
+          {
+            "node": "Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Facebook Post",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Linkedin Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
   "meta": {
-    "built_by": "Prasanna Kumar Das | RINDAX",
-    "website": "https://rindax.com",
-    "tools_used": ["n8n", "Claude AI", "OpenRouter", "RSS Feed", "LinkedIn API", "Facebook Graph API", "Instagram Graph API"]
+    "templateCredsSetupCompleted": false
   }
 }
