@@ -2,9 +2,13 @@
 
 **Built by [Prasanna Kumar Das](https://rindax.com) | AI Automation & Data Analytics Professional | Assam, India**
 
-This repository documents AI automation workflows built with **n8n**, **Claude AI**, **Google Gemini**, **Airtable**, **Gmail**, and **Telegram**, covering content, lead generation, job search, and inbox automation.
+This repository documents AI automation workflows built with **n8n**, **Claude AI**, **Google Gemini**, **Airtable**, **Gmail**, **Supabase**, and **Telegram**, covering content, lead generation, job search, and inbox automation.
 
-> ℹ️ **About the `.json` files:** each file is a simplified **workflow blueprint**: the nodes, the logic between them, the stack, and the design decisions. They are **not one-click n8n exports**, so importing one into n8n will not give you a working canvas. All credentials, IDs, and chat/page identifiers have been replaced with `YOUR_*` placeholders. Screenshots of the real canvases are in `assets/` and in each section below.
+> ℹ️ **About the `.json` files**
+> - `workflows/03-crm-outreach-agent.json` and `workflows/enterprise-kb-rag.json` are **sanitized exports of the real n8n workflows**. In n8n, use *Import from File*, then re-select your own credentials and replace every `YOUR_*` placeholder. The CRM agent is exported **inactive** and can send real email, so review it before activating.
+> - Every other `.json` file is a simplified **workflow blueprint** (nodes, logic, stack, design decisions), not a one-click import.
+>
+> All credentials, API keys, IDs, and chat identifiers have been removed or replaced with placeholders. Screenshots of the real canvases are in `assets/` and in each section below.
 
 ---
 
@@ -20,21 +24,24 @@ This repository documents AI automation workflows built with **n8n**, **Claude A
 ## 📂 Workflows
 
 ### 🆕 Enterprise Knowledge Base RAG — Ingestion & Q&A
-**File:** `workflows/enterprise-kb-rag.json`
+**File:** `workflows/enterprise-kb-rag.json` (importable export)
 
-Two independent webhook-triggered branches on one canvas: a document ingestion pipeline that dedupes against Postgres before chunking and embedding into a Supabase pgvector store, and a Q&A pipeline that retrieves top-K chunks, checks retrieval sufficiency, and answers strictly from retrieved context via a Gemini-powered grounded agent — with a Telegram escalation fallback when no answer is found.
+One workflow, two branches. **Ingestion** has three entry points: a header-authenticated webhook, a PDF upload form, and a bulk import from a Google Drive folder. Each document is cleaned, checked against Postgres so the same name + version + client is never ingested twice, then chunked and embedded into a Supabase pgvector store with metadata including `client_id`. **Q&A** runs through a Telegram bot: it embeds the question, retrieves the top 5 chunks for that client, checks the context is sufficient, and answers strictly from it with a Gemini agent that keeps per-chat memory. If the knowledge base doesn't cover the question, the bot says so and offers a human handoff (it does not notify a team member).
 
-**Stack:** n8n · Supabase (pgvector) · Postgres · Google Gemini · Telegram
+**Stack:** n8n · Supabase (pgvector) · Postgres · Google Gemini · Google Drive · Telegram
 
 **Flow:**
 ```
 [Ingestion]
-Webhook → Clean & Normalize Text → Check If Already Ingested (Postgres dedupe)
-→ Insert into Knowledge Base (Supabase vector store) → Notify Ingestion Success
+Webhook (header auth) / PDF Upload Form / Bulk Drive import
+→ Extract PDF text → Clean & Normalize → Check If Already Ingested (Postgres)
+→ [Duplicate: Telegram notice] / [New: Insert into Supabase vector store → Telegram success notice]
 
 [Q&A]
-Webhook → Normalize Question → Retrieve Top-K Chunks → Assess Retrieval Sufficiency
-→ [Sufficient: Grounded Answer Agent → Respond] / [Insufficient: Fallback → Telegram Escalation → Respond]
+Telegram message → Normalize Question → Retrieve Top-K Chunks (filtered by client_id)
+→ Assess Retrieval Sufficiency
+→ [Sufficient: Grounded Answer Agent (Gemini + memory) → Telegram reply]
+  / [Insufficient: Fallback message with human-handoff offer → Telegram reply]
 ```
 
 ![Enterprise KB RAG Workflow](./assets/Enterprise%20KB%20RAG.PNG)
@@ -42,7 +49,7 @@ Webhook → Normalize Question → Retrieve Top-K Chunks → Assess Retrieval Su
 ---
 
 ### 🆕 Personal Email Workflow → Telegram
-**File:** `workflows/personal-email-telegram.json`
+**File:** `workflows/personal-email-telegram.json` (blueprint)
 
 Gmail inbox triage with a Gemini classifier that sorts every unread email into promotional / important / needs-reply, drafts a ready-to-send reply for anything needing one, and routes it to Telegram with inline Send/Reject buttons — a tap sends the Gmail reply (with signature) and marks the thread read, or rejects it with no email sent.
 
@@ -61,7 +68,7 @@ Gmail Trigger (unread) → Classify Email (Gemini) → Route by Category
 ---
 
 ### 🆕 AI Lead Generation Automation
-**File:** `workflows/ai-lead-generation-automation.json`
+**File:** `workflows/ai-lead-generation-automation.json` (blueprint)
 
 Zero-cost B2B lead qualification engine: pulls from free job-board APIs (Arbeitnow, Jobicy, RemoteOK) and Hacker News signal search, keyword-scores for automation pain, dedupes against the CRM, then runs candidates through a two-stage Gemini pipeline — a primary qualifier followed by a deliberately skeptical auditor with veto power — before saving to Airtable.
 
@@ -79,7 +86,7 @@ Trigger (manual / 8 AM & 4 PM) → 5 parallel feed fetches → Normalize & Signa
 ---
 
 ### 🆕 Multi-Tenant WhatsApp AI Agent
-**File:** `workflows/multi-tenant-whatsapp-agent.json`
+**File:** `workflows/multi-tenant-whatsapp-agent.json` (blueprint)
 
 One reusable WhatsApp support agent deployable per client: resolves which business owns the inbound number, loads that client's own knowledge text and system prompt from Supabase, answers strictly from it via Claude Haiku with per-conversation memory, and replies on WhatsApp — never inventing details outside the client's knowledge doc.
 
@@ -97,7 +104,7 @@ WhatsApp Trigger → Normalize Input → Lookup Client by Phone Number (Supabase
 ---
 
 ### 1. 📱 Social Media Post Automation
-**File:** `workflows/01-social-media-post.json`
+**File:** `workflows/01-social-media-post.json` (blueprint)
 
 Scheduled workflow that reads blog posts from Google Sheets and auto-publishes to **LinkedIn**, **Facebook**, and **Instagram** with Claude AI-generated captions.
 
@@ -114,7 +121,7 @@ Schedule Trigger → Google Sheets (fetch pending post) → Claude AI (generate 
 ---
 
 ### 2. 📡 RSS Feed → Social Media Pipeline
-**File:** `workflows/02-rss-social-media-post.json`
+**File:** `workflows/02-rss-social-media-post.json` (blueprint)
 
 Fully automated pipeline that monitors a blog RSS feed and instantly publishes new articles to all 3 social platforms — zero manual input required.
 
@@ -131,11 +138,11 @@ RSS Feed Trigger → HTML Parser (extract image) → Claude AI (generate caption
 ---
 
 ### 3. 🧠 Autonomous CRM Outreach Agent
-**File:** `workflows/03-crm-outreach-agent.json`
+**File:** `workflows/03-crm-outreach-agent.json` (importable export, inactive)
 
-Fully autonomous CRM agent powered by **Claude Sonnet** that handles the entire outreach lifecycle — fetches leads from Airtable, writes personalized emails, sends via Gmail, tracks replies, and updates lead status automatically.
+Two tool-calling agents on **Claude Haiku 4.5** that run the outreach lifecycle against an Airtable CRM. The **Outreach Agent** runs daily at 9 AM: it pulls New / Follow Up Due / Replied leads, extracts the email from a mixed contact field, closes leads with no email, de-duplicates by address, then researches each lead (website scrape plus Google Search and Maps via Serper) before the agent decides whether to skip the lead, escalate it, or send a short personalised email through Gmail and update Airtable. The **Response Tracker** runs every 4 hours: it checks Gmail for replies, classifies intent, updates status and follow-up counts (auto-closing after 3 follow-ups), and escalates pricing, meeting, and technical questions to a human on Telegram.
 
-**Stack:** n8n · Claude Sonnet 4.6 · Airtable · Gmail · AI Agent Nodes
+**Stack:** n8n · Claude Haiku 4.5 · Airtable · Gmail · Serper (Google Search / Maps) · Telegram
 
 **Two agents running in parallel:**
 - **Outreach Agent** — runs at 9 AM daily
@@ -144,12 +151,13 @@ Fully autonomous CRM agent powered by **Claude Sonnet** that handles the entire 
 **Flow:**
 ```
 [Outreach Agent]
-Schedule (9 AM) → Airtable (fetch leads) → Extract Email → Filter → Deduplicate
-→ Loop: Claude Agent → Send Gmail → Update Airtable
+Schedule (9 AM) → Airtable (fetch leads) → Extract Email → Has Email?
+→ [No: mark Closed] / [Yes: Remove Duplicates → Scrape Website (if any) → Google Search → Google Maps → Compile Research]
+→ Loop: Claude Agent → (skip / Telegram escalation / Send Gmail) → Update Airtable
 
 [Response Tracker]
 Schedule (every 4h) → Claude Agent:
-  Check Gmail → Match replies → Classify intent → Update Airtable
+  Fetch Contacted leads → Check Gmail → Classify intent → Reply or escalate to Telegram → Update Airtable
 ```
 
 ![CRM Agent Workflow](./assets/CRM%20Agent.PNG)
@@ -157,7 +165,7 @@ Schedule (every 4h) → Claude Agent:
 ---
 
 ### 4. 📋 Google Sheet → Airtable Leads Sync
-**File:** `workflows/04-leads-crm-sync.json`
+**File:** `workflows/04-leads-crm-sync.json` (blueprint)
 
 Daily sync that reads new leads from a Google Sheet, checks for duplicates in Airtable by company name, and adds only genuinely new leads with an auto-assigned Temperature based on city.
 
@@ -174,7 +182,7 @@ Paired with a Telegram approval bridge (native inline buttons) that approves or 
 ---
 
 ### 5. 🔍 RSS Job Finder
-**File:** `workflows/05-rss-job-finder.json`
+**File:** `workflows/05-rss-job-finder.json` (blueprint)
 
 Daily search across 11 freelance/remote job sources (Upwork, LinkedIn, Contra, PeoplePerHour, Freelancer, Truelancer, Hubstaff Talent, Naukri, Reddit r/forhire, and general web search) for n8n, Power BI, Excel, and AI-automation roles. Scores and filters results, splits into "Direct Mail" (named contact email) vs "ATS" (apply-on-portal), logs new ones to Airtable, and sends a Telegram digest.
 
@@ -191,7 +199,7 @@ Paired with a Telegram approval bridge that drafts and sends the application ema
 ---
 
 ### 6. 🌐 Multi-Platform ATS Job Finder
-**File:** `workflows/06-multi-platform-ats-job-finder.json`
+**File:** `workflows/06-multi-platform-ats-job-finder.json` (blueprint)
 
 Twice-daily scan of 11 job feeds across 6 ATS platforms (Himalayas, Arbeitnow, RemoteOK, WeWorkRemotely, Greenhouse, Lever, Ashby), normalized into a common schema with freshness/hiring-intent scoring, keyword pre-filtered, then AI-scored by Gemini against a detailed candidate-fit profile with hard rejection gates. Deduplicates and saves the top 10 new highest-priority jobs to Airtable.
 
@@ -208,7 +216,7 @@ Paired with a Telegram proposal notifier and an "Applied" status handler.
 ---
 
 ### 7. 🎯 Direct Human Hiring Opportunity Finder
-**File:** `workflows/07-direct-human-hiring-finder.json`
+**File:** `workflows/07-direct-human-hiring-finder.json` (blueprint)
 
 Twice-daily scan of Reddit and web search for people directly asking to hire an n8n/automation freelancer — not formal ATS postings. Extracts contact emails/LinkedIn, screens out job-seeker and agency-ad posts, runs each requirement through a strict Gemini evaluator with hard rejection gates, and saves the top 10 highest-fit new opportunities to Airtable.
 
@@ -223,7 +231,7 @@ Schedule (10 AM / 6 PM) → 6 parallel source searches → Normalize → Pre-fil
 ---
 
 ### 8. 💰 Lead Finder v2 — Linear, No Agent
-**File:** `workflows/08-lead-finder-v2-linear.json`
+**File:** `workflows/08-lead-finder-v2-linear.json` (blueprint)
 
 A cost-optimization case study: replaces an earlier AI-agent-based lead finder (~$2.80 per test run) with a straight linear pipeline — 5 rotating local-business searches/day, deduplicated against Airtable, one AI call per lead (~300 tokens) — cutting cost to roughly $0.0002/day (~99.9% cheaper).
 
@@ -238,7 +246,7 @@ Schedule (8 AM) → Build 5 daily search categories → Maps search → Extract 
 ---
 
 ### 9. 🧭 High-Intent B2B Lead Gen & AI Qualification
-**File:** `workflows/09-b2b-lead-qualification.json`
+**File:** `workflows/09-b2b-lead-qualification.json` (blueprint)
 
 Zero-cost buyer-intent engine: scans free job-board APIs and subreddits for businesses openly describing manual, repetitive operational pain, keyword-scores the signal, then runs candidates through a two-stage AI pipeline — a primary Gemini qualifier, followed by a deliberately skeptical Gemini "auditor" with veto power — before anything reaches the CRM.
 
@@ -254,7 +262,7 @@ Trigger → Fetch job feeds + Reddit → Signal scoring → Dedup vs CRM
 ---
 
 ### 10. 📬 Email Triage & Auto-Reply System (Daily Mail Router)
-**File:** `workflows/10-email-triage-router.json`
+**File:** `workflows/10-email-triage-router.json` (blueprint)
 
 Webhook-driven router that receives pre-classified email events and routes them by tier: FYI-only summaries post a Telegram notification; reply-required emails are staged and sent to Telegram with inline Approve/Reject buttons — approving triggers an instant Gmail reply, then cleans up the pending record.
 
@@ -272,12 +280,16 @@ Paired with separate Official-inbox and Personal-inbox classification workflows 
 
 ---
 
-## 🛠️ How to Read These Blueprints
+## 🛠️ How to Use These Files
 
-1. Open a `.json` file to see each workflow's nodes, the notes explaining what each one does, and the `connections` map showing how data flows.
-2. Use the **Flow** diagram above each blueprint as the build order when recreating it in your own n8n instance.
-3. Create credentials with n8n's built-in credential manager (Airtable, Gmail, Google Gemini, Anthropic, Telegram, etc.). Never paste API keys or bot tokens into node parameters.
-4. Replace every `YOUR_*` placeholder with your own IDs (Airtable base/table, Telegram chat, Supabase table, and so on).
+**Importable exports** (`03-crm-outreach-agent.json`, `enterprise-kb-rag.json`):
+1. In n8n choose *Import from File* and select the `.json`.
+2. Create credentials with n8n's credential manager (Airtable, Gmail, Anthropic, Google Gemini, Supabase, Postgres, Google Drive, Telegram, header auth) and attach them to the nodes. Never paste API keys into node parameters.
+3. Replace every `YOUR_*` placeholder (Airtable base/table/field IDs, Telegram chat ID, Drive folder ID, webhook path, Serper key).
+4. For the RAG workflow, create a pgvector-enabled `documents` table and a `match_documents` function in Supabase.
+5. Test with manual executions before activating anything that sends email.
+
+**Blueprints** (all other `.json` files): read the nodes, notes, and `connections` map, and use the **Flow** diagram as the build order when recreating the workflow in your own n8n instance.
 
 ---
 
