@@ -23,6 +23,7 @@ A small data pipeline that generates sample e-commerce data, loads it into a clo
 | `load_data.py` | Creates the schema and loads the data |
 | `analytics.sql` | Five analytics queries |
 | `report.py` | Runs the queries and prints the results |
+| `dashboard.py` | Streamlit web dashboard |
 | `db.py` | Connection helper, credentials from environment variables |
 
 ## Setup
@@ -44,6 +45,16 @@ python report.py      # read-only analytics report
 ```
 
 Never commit `.env` or `ca.pem`. The `.gitignore` already excludes them.
+
+## Dashboard
+
+`dashboard.py` is a Streamlit web dashboard over the same queries (KPIs, monthly revenue trend, category and city charts, top customers).
+
+```bash
+streamlit run dashboard.py
+```
+
+To publish it on Streamlit Community Cloud, deploy this repo with `customer-data-pipeline/dashboard.py` as the main file, and paste your database settings into the app's Secrets box using `secrets.example.toml` as a template. Use a read-only database user for any public deployment.
 
 ## Sample output
 
