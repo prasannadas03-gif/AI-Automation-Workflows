@@ -1,6 +1,6 @@
 # Customer Data Pipeline (Python + MySQL)
 
-A small data pipeline that generates sample e-commerce data, loads it into a cloud MySQL database (Aiven) over SSL from a Python app running on an Oracle Cloud VM, and reports business metrics using SQL.
+A small data pipeline that generates sample e-commerce data, loads it into a cloud MySQL database (Aiven) over SSL, and reports business metrics using SQL and a web dashboard (Streamlit). The scripts can run anywhere with Python; I ran the load and report steps on an Oracle Cloud VM, and the dashboard connects straight to the database.
 
 ## What it does
 
@@ -12,7 +12,8 @@ A small data pipeline that generates sample e-commerce data, loads it into a clo
 
 - Python 3, `mysql-connector-python`, `python-dotenv`
 - MySQL 8.4 on Aiven, connected over SSL with a CA certificate
-- Runs on an Oracle Cloud VM inside a Python virtual environment
+- Streamlit for the web dashboard (hosted on Streamlit Community Cloud)
+- Load and report scripts run in a Python virtual environment (I used an Oracle Cloud VM)
 
 ## Project layout
 
