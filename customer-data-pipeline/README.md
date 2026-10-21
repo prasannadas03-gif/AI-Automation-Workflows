@@ -49,7 +49,9 @@ Never commit `.env` or `ca.pem`. The `.gitignore` already excludes them.
 
 ## Dashboard
 
-`dashboard.py` is a Streamlit web dashboard over the same queries (KPIs, monthly revenue trend, category and city charts, top customers).
+**Live demo: https://python-mysql-sample-dashboard.streamlit.app** (read-only, synthetic data; it may take about 30 seconds to wake up if nobody has visited recently).
+
+`dashboard.py` is a Streamlit web dashboard over the same queries (KPIs, monthly revenue trend, category and city charts, top customers). It connects with a read-only database user.
 
 ```bash
 streamlit run dashboard.py

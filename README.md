@@ -24,6 +24,8 @@ This repository documents AI automation workflows built with **n8n**, **Claude A
 ## 🗄️ Python + MySQL Project
 
 ### [Customer Data Pipeline](./customer-data-pipeline)
+**Live dashboard:** [python-mysql-sample-dashboard.streamlit.app](https://python-mysql-sample-dashboard.streamlit.app) (read-only, synthetic data)
+
 A Python and SQL data pipeline that loads synthetic e-commerce data (customers, products, orders, order items) into a cloud MySQL database (Aiven, over SSL), then reports revenue trends, top customers, category and city performance, and repeat-customer rate using SQL joins and aggregations, with a Streamlit web dashboard on top.
 
 **Stack:** Python · MySQL 8.4 (Aiven) · mysql-connector-python · Streamlit · pandas

@@ -6,6 +6,7 @@ Reuses the SQL in analytics.sql, so the dashboard and report.py always agree.
 from decimal import Decimal
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -47,7 +48,18 @@ kpi3.metric("Customers with orders", f"{int(repeat['customers_with_orders']):,}"
 kpi4.metric("Repeat customer rate", f"{repeat['repeat_rate_pct']:.1f}%")
 
 st.subheader("Monthly revenue")
-st.line_chart(monthly.set_index("month")["revenue"])
+monthly_chart = (
+    alt.Chart(monthly)
+    .mark_line(point=True)
+    .encode(
+        x=alt.X("month:N", title="Month", axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y("revenue:Q", title="Revenue", scale=alt.Scale(domainMin=0),
+                axis=alt.Axis(format=",.0f")),
+        tooltip=["month", "orders", alt.Tooltip("revenue:Q", format=",.0f")],
+    )
+    .properties(height=350)
+)
+st.altair_chart(monthly_chart, use_container_width=True)
 
 left, right = st.columns(2)
 with left:
@@ -58,4 +70,6 @@ with right:
     st.bar_chart(data["Revenue by city"].set_index("city")["revenue"])
 
 st.subheader("Top 5 customers by spend")
-st.dataframe(data["Top 5 customers by spend"], hide_index=True, use_container_width=True)
+top_customers = data["Top 5 customers by spend"].copy()
+top_customers["total_spent"] = top_customers["total_spent"].map("{:,.0f}".format)
+st.dataframe(top_customers, hide_index=True, use_container_width=True)
