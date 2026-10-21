@@ -53,6 +53,8 @@ Never commit `.env` or `ca.pem`. The `.gitignore` already excludes them.
 
 `dashboard.py` is a Streamlit web dashboard over the same queries (KPIs, monthly revenue trend, category and city charts, top customers). It connects with a read-only database user.
 
+![Customer Data Pipeline dashboard](screenshots/dashboard.png)
+
 ```bash
 streamlit run dashboard.py
 ```

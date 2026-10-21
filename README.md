@@ -30,6 +30,8 @@ A Python and SQL data pipeline that loads synthetic e-commerce data (customers, 
 
 **Stack:** Python · MySQL 8.4 (Aiven) · mysql-connector-python · Streamlit · pandas
 
+![Customer Data Pipeline Dashboard](./customer-data-pipeline/screenshots/dashboard.png)
+
 ---
 
 ## 📂 Workflows
