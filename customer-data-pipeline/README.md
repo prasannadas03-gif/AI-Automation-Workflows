@@ -80,6 +80,10 @@ customers_with_orders  repeat_customers  repeat_rate_pct
 196                    186               94.9
 ```
 
+## License
+
+MIT, see [LICENSE](LICENSE). This license covers the `customer-data-pipeline` folder only.
+
 ## SQL concepts shown
 
 - Multi-table `JOIN`s across four tables
